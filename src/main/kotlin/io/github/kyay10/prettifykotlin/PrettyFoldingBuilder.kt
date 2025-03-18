@@ -56,12 +56,12 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
           val (prefix, suffix) = annotation.valueArguments.also { ensure(it.size == 2) }.map { it.constValue }
           ensure(prefix is String && suffix is String)
 
-          val group = FoldingGroup.newGroup("brackets")
+          //val group = FoldingGroup.newGroup("brackets")
           val (leftPar, rightPar) = expression.valueArgumentList.bind().run {
             leftParenthesis.bind() to rightParenthesis.bind()
           }
-          add(PrettyFoldingDescriptor(leftPar, prefix, group, neverExpands = false))
-          add(PrettyFoldingDescriptor(rightPar, suffix, group, neverExpands = false))
+          add(PrettyFoldingDescriptor(leftPar, prefix))
+          add(PrettyFoldingDescriptor(rightPar, suffix))
         }
 
         override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) = impure {

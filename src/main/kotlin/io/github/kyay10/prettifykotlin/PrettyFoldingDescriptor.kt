@@ -6,4 +6,4 @@ import com.intellij.psi.PsiElement
 
 class PrettyFoldingDescriptor(
   node: PsiElement, placeholder: String, group: FoldingGroup? = null, neverExpands: Boolean = true
-) : FoldingDescriptor(node.node, node.textRange, group, mutableSetOf<Any?>(), neverExpands, placeholder, null)
+) : FoldingDescriptor(node.node, node.textRange, group, mutableSetOf<Any?>(), neverExpands, placeholder, true)
