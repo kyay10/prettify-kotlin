@@ -5,7 +5,5 @@ import com.intellij.openapi.editor.FoldingGroup
 import com.intellij.psi.PsiElement
 
 class PrettyFoldingDescriptor(
-  node: PsiElement, placeholder: String, group: FoldingGroup? = null
-) : FoldingDescriptor(node.node, node.textRange, group, placeholder) {
-   override fun isNonExpandable(): Boolean = true
-}
+  node: PsiElement, placeholder: String, group: FoldingGroup? = null, neverExpands: Boolean = true
+) : FoldingDescriptor(node.node, node.textRange, group, mutableSetOf<Any?>(), neverExpands, placeholder, null)
