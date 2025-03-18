@@ -12,17 +12,20 @@ import org.jetbrains.kotlin.idea.util.findAnnotation
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtAnnotated
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtLabelReferenceExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.psi.ValueArgument
+import org.jetbrains.kotlin.psi.psiUtil.allChildren
 import org.jetbrains.uast.UExpression
 import org.jetbrains.uast.toUElementOfType
 
 val PRETTY_FQNAME = FqName("io.github.kyay10.prettifykotlin.Pretty")
 val PREFIX_FQNAME = FqName("io.github.kyay10.prettifykotlin.Prefix")
+val POSTFIX_FQNAME = FqName("io.github.kyay10.prettifykotlin.Postfix")
 
 class PrettyFoldingBuilder : FoldingBuilderEx() {
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
@@ -59,6 +62,19 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
           }
           add(PrettyFoldingDescriptor(leftPar, prefix, group, neverExpands = false))
           add(PrettyFoldingDescriptor(rightPar, suffix, group, neverExpands = false))
+        }
+
+        override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) = impure {
+          super.visitDotQualifiedExpression(expression)
+          val selector = expression.selectorExpression
+          ensure(selector is KtSimpleNameExpression)
+          val reference = selector.mainReference.bind().resolve()
+          ensure(reference is KtAnnotated)
+
+          val annotation = reference.findAnnotation(POSTFIX_FQNAME).bind()
+          val suffix = annotation.valueArguments.singleOrNull().bind().constValue
+          ensure(suffix is String)
+          add(PrettyFoldingDescriptor(expression.allChildren.first { it.text == "." }, suffix))
         }
       })
     }.toTypedArray()
