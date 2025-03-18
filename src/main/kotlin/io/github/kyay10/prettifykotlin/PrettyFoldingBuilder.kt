@@ -7,7 +7,6 @@ import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.FoldingGroup
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.idea.inspections.AbstractRangeInspection.Companion.constantValueOrNull
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.util.findAnnotation
 import org.jetbrains.kotlin.name.FqName
@@ -19,6 +18,8 @@ import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.psi.ValueArgument
+import org.jetbrains.uast.UExpression
+import org.jetbrains.uast.toUElementOfType
 
 val PRETTY_FQNAME = FqName("io.github.kyay10.prettifykotlin.Pretty")
 val PREFIX_FQNAME = FqName("io.github.kyay10.prettifykotlin.Prefix")
@@ -68,4 +69,5 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
   override fun isCollapsedByDefault(node: ASTNode): Boolean = true
 }
 
-private val ValueArgument.constValue get() = getArgumentExpression()?.constantValueOrNull()?.value
+private val ValueArgument.constValue: Any?
+  get() = getArgumentExpression()?.toUElementOfType<UExpression>()?.evaluate()
