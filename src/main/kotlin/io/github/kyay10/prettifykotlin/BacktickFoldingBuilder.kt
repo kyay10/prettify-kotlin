@@ -4,11 +4,12 @@ import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
 import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.project.DumbAware
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 
-class BacktickFoldingBuilder : FoldingBuilderEx() {
+class BacktickFoldingBuilder : FoldingBuilderEx(), DumbAware {
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
     buildList {
       root.accept(object : KtTreeVisitorVoid() {
@@ -26,4 +27,3 @@ class BacktickFoldingBuilder : FoldingBuilderEx() {
 
   override fun isCollapsedByDefault(node: ASTNode): Boolean = true
 }
-
