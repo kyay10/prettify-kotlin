@@ -1,4 +1,3 @@
-import java.util.*
 plugins {
     kotlin("multiplatform") version "1.9.20"
     id("org.jetbrains.dokka") version "1.9.10"
@@ -7,7 +6,7 @@ plugins {
 }
 
 group = "io.github.kyay10"
-version = "1.0"
+version = "1.1"
 
 repositories {
     mavenCentral()
@@ -41,33 +40,7 @@ publishing {
     }
 }
 
-// Stub secrets to let the project sync and build without the publication values set up
-ext["signing.keyId"] = null
-ext["signing.password"] = null
-ext["signing.secretKeyRingFile"] = null
-ext["ossrhUsername"] = null
-ext["ossrhPassword"] = null
-
-// Grabbing secrets from local.properties file or from environment variables, which could be used on CI
-val secretPropsFile = project.rootProject.file("local.properties")
-if (secretPropsFile.exists()) {
-    secretPropsFile.reader().use {
-        Properties().apply {
-            load(it)
-        }
-    }.onEach { (name, value) ->
-        ext[name.toString()] = value
-    }
-} else {
-    ext["signing.keyId"] = System.getenv("SIGNING_KEY_ID")
-    ext["signing.password"] = System.getenv("SIGNING_PASSWORD")
-    ext["signing.secretKeyRingFile"] = System.getenv("SIGNING_SECRET_KEY_RING_FILE")
-    ext["ossrhUsername"] = System.getenv("OSSRH_USERNAME")
-    ext["ossrhPassword"] = System.getenv("OSSRH_PASSWORD")
-}
-
-
-fun getExtraString(name: String) = ext[name]?.toString()
+fun getExtraString(name: String) = properties[name]?.toString()
 
 publishing {
     // Configure maven central repository
@@ -76,8 +49,8 @@ publishing {
             name = "sonatype"
             setUrl("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
             credentials {
-                username = getExtraString("ossrhUsername")
-                password = getExtraString("ossrhPassword")
+                username = getExtraString("sonatypeUsername")
+                password = getExtraString("sonatypePassword")
             }
         }
     }

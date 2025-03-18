@@ -4,9 +4,9 @@ annotations = "24.0.1"
 
 # plugins
 arrow = "2.0.1"
-kotlin = "1.9.10"
+kotlin = "2.0.21"
 changelog = "2.2.0"
-gradleIntelliJPlugin = "1.16.0"
+gradleIntelliJPlugin = "2.3.0"
 qodana = "0.1.13"
 kover = "0.7.3"
 
@@ -16,7 +16,7 @@ arrow-core = { group = "io.arrow-kt", name = "arrow-core", version.ref = "arrow"
 
 [plugins]
 changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
-gradleIntelliJPlugin = { id = "org.jetbrains.intellij", version.ref = "gradleIntelliJPlugin" }
+gradleIntelliJPlugin = { id = "org.jetbrains.intellij.platform", version.ref = "gradleIntelliJPlugin" }
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 qodana = { id = "org.jetbrains.qodana", version.ref = "qodana" }
