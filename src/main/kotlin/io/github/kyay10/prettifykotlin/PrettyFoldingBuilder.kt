@@ -10,6 +10,7 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.util.findAnnotation
 import org.jetbrains.kotlin.idea.util.isMultiline
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtAnnotated
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -25,6 +26,7 @@ import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.psi.psiUtil.allChildren
 import org.jetbrains.uast.UExpression
 import org.jetbrains.uast.toUElementOfType
+import org.toml.lang.psi.ext.elementType
 
 val PRETTY_FQNAME = FqName("io.github.kyay10.prettifykotlin.Pretty")
 val PREFIX_FQNAME = FqName("io.github.kyay10.prettifykotlin.Prefix")
@@ -113,7 +115,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
           val annotation = reference.findAnnotation(POSTFIX_FQNAME).bind()
           val suffix = annotation.valueArguments.singleOrNull().bind().constValue
           ensure(suffix is String)
-          add(PrettyFoldingDescriptor(expression.allChildren.first { it.text == "." }, suffix))
+          add(PrettyFoldingDescriptor(expression.allChildren.first { it.elementType == KtTokens.DOT }, suffix))
         }
       })
     }.toTypedArray()
