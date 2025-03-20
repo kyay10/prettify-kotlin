@@ -90,61 +90,15 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
                 if (arg !is KtLambdaExpression) return@forEach
                 val lambda = arg.functionLiteral
                 add(PrettyFoldingDescriptor(lambda.lBrace, prefix))
-                val lBraceWhitespace = lambda.lBrace.nextSibling
-                if (lBraceWhitespace.text.startsWith(" "))
-                  add(
-                    PrettyFoldingDescriptor(
-                      lBraceWhitespace,
-                      "",
-                      range = TextRange(
-                        lBraceWhitespace.textRange.startOffset,
-                        lBraceWhitespace.textRange.startOffset + 1
-                      )
-                    )
-                  )
+                lambda.lBrace.foldForSingleSpaceAfter?.let(::add)
                 lambda.arrow?.let {
                   add(PrettyFoldingDescriptor(it, arrow))
-                  val afterArrowWhitespace = it.nextSibling
-                  if (afterArrowWhitespace.text.startsWith(" "))
-                    add(
-                      PrettyFoldingDescriptor(
-                        afterArrowWhitespace,
-                        "",
-                        range = TextRange(
-                          afterArrowWhitespace.textRange.startOffset,
-                          afterArrowWhitespace.textRange.startOffset + 1
-                        )
-                      )
-                    )
-                  val beforeArrowWhitespace = it.prevSibling
-                  if (beforeArrowWhitespace.text.endsWith(" "))
-                    add(
-                      PrettyFoldingDescriptor(
-                        beforeArrowWhitespace,
-                        "",
-                        range = TextRange(
-                          beforeArrowWhitespace.textRange.endOffset - 1,
-                          beforeArrowWhitespace.textRange.endOffset
-                        )
-                      )
-                    )
+                  it.foldForSingleSpaceAfter?.let(::add)
+                  it.foldForSingleSpaceBefore?.let(::add)
                 }
                 lambda.rBrace?.let {
                   add(PrettyFoldingDescriptor(it, suffix))
-                  if (!lambda.isMultiline()) {
-                    val rBraceWhitespace = it.prevSibling
-                    if (rBraceWhitespace.text.endsWith(" "))
-                      add(
-                        PrettyFoldingDescriptor(
-                          rBraceWhitespace,
-                          "",
-                          range = TextRange(
-                            rBraceWhitespace.textRange.endOffset - 1,
-                            rBraceWhitespace.textRange.endOffset
-                          )
-                        )
-                      )
-                  }
+                  if (!lambda.isMultiline()) it.foldForSingleSpaceBefore?.let(::add)
                 }
               }
             }
@@ -176,3 +130,23 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
 
 private fun KaAnnotation.findConstantArgument(name: Name): Any? =
   (arguments.find { it.name == name }?.expression as? KaAnnotationValue.ConstantValue)?.value?.value
+
+private val PsiElement.foldForSingleSpaceBefore: FoldingDescriptor?
+  get() {
+    val whitespace = prevSibling
+    return if (whitespace.text.endsWith(" "))
+      PrettyFoldingDescriptor(
+        whitespace, "", range = TextRange(whitespace.textRange.endOffset - 1, whitespace.textRange.endOffset)
+      )
+    else null
+  }
+
+private val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
+  get() {
+    val whitespace = nextSibling
+    return if (whitespace.text.startsWith(" "))
+      PrettyFoldingDescriptor(
+        whitespace, "", range = TextRange(whitespace.textRange.startOffset, whitespace.textRange.startOffset + 1)
+      )
+    else null
+  }
