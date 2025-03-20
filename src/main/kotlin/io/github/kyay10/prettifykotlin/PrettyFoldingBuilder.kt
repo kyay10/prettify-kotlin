@@ -7,31 +7,40 @@ import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.analysis.api.analyze
+import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotated
+import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
+import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
+import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.idea.references.mainReference
-import org.jetbrains.kotlin.idea.util.findAnnotation
 import org.jetbrains.kotlin.idea.util.isMultiline
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.psi.KtAnnotated
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
-import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtLabelReferenceExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
-import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.psi.psiUtil.allChildren
-import org.jetbrains.uast.UExpression
-import org.jetbrains.uast.toUElementOfType
 import org.toml.lang.psi.ext.elementType
 
-val PRETTY_FQNAME = FqName("io.github.kyay10.prettifykotlin.Pretty")
-val PREFIX_FQNAME = FqName("io.github.kyay10.prettifykotlin.Prefix")
-val POSTFIX_FQNAME = FqName("io.github.kyay10.prettifykotlin.Postfix")
-val AUTOLAMBDA_FQNAME = FqName("io.github.kyay10.prettifykotlin.AutoLambda")
+val PACKAGE_FQNAME = FqName("io.github.kyay10.prettifykotlin")
+val PRETTY = ClassId(PACKAGE_FQNAME, Name.identifier("Pretty"))
+val PRETTY_NAME = Name.identifier("name")
+val PREFIX = ClassId(PACKAGE_FQNAME, Name.identifier("Prefix"))
+val PREFIX_PREFIX = Name.identifier("prefix")
+val PREFIX_SUFFIX = Name.identifier("suffix")
+val POSTFIX = ClassId(PACKAGE_FQNAME, Name.identifier("Postfix"))
+val POSTFIX_SUFFIX = Name.identifier("suffix")
+val AUTOLAMBDA = ClassId(PACKAGE_FQNAME, Name.identifier("AutoLambda"))
+val AUTOLAMBDA_PREFIX = Name.identifier("prefix")
+val AUTOLAMBDA_ARROW = Name.identifier("arrow")
+val AUTOLAMBDA_SUFFIX = Name.identifier("suffix")
 
 class PrettyFoldingBuilder : FoldingBuilderEx() {
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
@@ -42,63 +51,100 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
           super.visitSimpleNameExpression(expression)
 
           ensure(expression.parent !is KtThisExpression && expression.parent !is KtSuperExpression && expression !is KtLabelReferenceExpression)
-          val reference = expression.mainReference.resolve()
-          ensure(reference is KtAnnotated)
+          analyze(expression) {
+            val reference = expression.mainReference.resolveToSymbol()
+            ensure(reference is KaAnnotated)
+            val annotation = reference.annotations[PRETTY].singleOrNull().bind()
+            val name = annotation.findConstantArgument(PRETTY_NAME)
+            ensure(name is String)
 
-          val annotation = reference.findAnnotation(PRETTY_FQNAME).bind()
-          val name = annotation.valueArguments.singleOrNull().bind().constValue
-          ensure(name is String)
-
-          add(PrettyFoldingDescriptor(expression, name))
+            add(PrettyFoldingDescriptor(expression, name))
+          }
         }
 
         override fun visitCallExpression(expression: KtCallExpression) = impure {
           super.visitCallExpression(expression)
-          val reference = expression.calleeExpression.bind().mainReference.bind().resolve()
-          ensure(reference is KtAnnotated)
-          impure {
-            val annotation = reference.findAnnotation(PREFIX_FQNAME).bind()
-            val (prefix, suffix) = annotation.valueArguments.also { ensure(it.size == 2) }.map { it.constValue }
-            ensure(prefix is String && suffix is String)
+          analyze(expression) {
+            val reference = expression.calleeExpression.bind().mainReference.bind().resolveToSymbol()
+            ensure(reference is KaAnnotated)
+            impure {
+              val annotation = reference.annotations[PREFIX].singleOrNull().bind()
+              val prefix = annotation.findConstantArgument(PREFIX_PREFIX)
+              val suffix = annotation.findConstantArgument(PREFIX_SUFFIX)
+              ensure(prefix is String && suffix is String)
 
-            val (leftPar, rightPar) = expression.valueArgumentList.bind().run {
-              leftParenthesis.bind() to rightParenthesis.bind()
-            }
-            add(PrettyFoldingDescriptor(leftPar, prefix))
-            add(PrettyFoldingDescriptor(rightPar, suffix))
-          }
-          impure {
-            ensure(reference is KtFunction)
-            val params = reference.valueParameters
-            val argToParam = expression.valueArguments.mapIndexed { index, arg ->
-              arg to (arg.name?.let { name -> params.find { it.name == name }.bind() } ?: params.getOrNull(index)
-                .bind())
-            }
-            argToParam.forEach { (arg, param) ->
-              val annotation = param.findAnnotation(AUTOLAMBDA_FQNAME) ?: return@forEach
-              val (prefix, arrow, suffix) = annotation.valueArguments.also { ensure(it.size == 3) }
-                .map { it.constValue }
-              ensure(prefix is String && arrow is String && suffix is String)
-              val lambda = (arg.getArgumentExpression() as? KtLambdaExpression ?: return@forEach).bind().functionLiteral
-              add(PrettyFoldingDescriptor(lambda.lBrace, prefix))
-              val lBraceWhitespace = lambda.lBrace.nextSibling
-              if (lBraceWhitespace.text.startsWith(" "))
-                add(PrettyFoldingDescriptor(lBraceWhitespace, "", range = TextRange(lBraceWhitespace.textRange.startOffset, lBraceWhitespace.textRange.startOffset + 1)))
-              lambda.arrow?.let {
-                add(PrettyFoldingDescriptor(it, arrow))
-                val afterArrowWhitespace = it.nextSibling
-                if (afterArrowWhitespace.text.startsWith(" "))
-                  add(PrettyFoldingDescriptor(afterArrowWhitespace, "", range = TextRange(afterArrowWhitespace.textRange.startOffset, afterArrowWhitespace.textRange.startOffset + 1)))
-                val beforeArrowWhitespace = it.prevSibling
-                if (beforeArrowWhitespace.text.endsWith(" "))
-                  add(PrettyFoldingDescriptor(beforeArrowWhitespace, "", range = TextRange(beforeArrowWhitespace.textRange.endOffset - 1, beforeArrowWhitespace.textRange.endOffset)))
+              val (leftPar, rightPar) = expression.valueArgumentList.bind().run {
+                leftParenthesis.bind() to rightParenthesis.bind()
               }
-              lambda.rBrace?.let {
-                add(PrettyFoldingDescriptor(it, suffix))
-                if(!lambda.isMultiline()) {
-                  val rBraceWhitespace = it.prevSibling
-                  if (rBraceWhitespace.text.endsWith(" "))
-                    add(PrettyFoldingDescriptor(rBraceWhitespace, "", range = TextRange(rBraceWhitespace.textRange.endOffset - 1, rBraceWhitespace.textRange.endOffset)))
+              add(PrettyFoldingDescriptor(leftPar, prefix))
+              add(PrettyFoldingDescriptor(rightPar, suffix))
+            }
+            impure {
+              val call = expression.resolveToCall()?.successfulFunctionCallOrNull().bind()
+              call.argumentMapping.forEach { (arg, param) ->
+                val annotation = param.symbol.annotations[AUTOLAMBDA].singleOrNull() ?: return@forEach
+                val prefix = annotation.findConstantArgument(AUTOLAMBDA_PREFIX)
+                val arrow = annotation.findConstantArgument(AUTOLAMBDA_ARROW)
+                val suffix = annotation.findConstantArgument(AUTOLAMBDA_SUFFIX)
+                ensure(prefix is String && arrow is String && suffix is String)
+                if (arg !is KtLambdaExpression) return@forEach
+                val lambda = arg.functionLiteral
+                add(PrettyFoldingDescriptor(lambda.lBrace, prefix))
+                val lBraceWhitespace = lambda.lBrace.nextSibling
+                if (lBraceWhitespace.text.startsWith(" "))
+                  add(
+                    PrettyFoldingDescriptor(
+                      lBraceWhitespace,
+                      "",
+                      range = TextRange(
+                        lBraceWhitespace.textRange.startOffset,
+                        lBraceWhitespace.textRange.startOffset + 1
+                      )
+                    )
+                  )
+                lambda.arrow?.let {
+                  add(PrettyFoldingDescriptor(it, arrow))
+                  val afterArrowWhitespace = it.nextSibling
+                  if (afterArrowWhitespace.text.startsWith(" "))
+                    add(
+                      PrettyFoldingDescriptor(
+                        afterArrowWhitespace,
+                        "",
+                        range = TextRange(
+                          afterArrowWhitespace.textRange.startOffset,
+                          afterArrowWhitespace.textRange.startOffset + 1
+                        )
+                      )
+                    )
+                  val beforeArrowWhitespace = it.prevSibling
+                  if (beforeArrowWhitespace.text.endsWith(" "))
+                    add(
+                      PrettyFoldingDescriptor(
+                        beforeArrowWhitespace,
+                        "",
+                        range = TextRange(
+                          beforeArrowWhitespace.textRange.endOffset - 1,
+                          beforeArrowWhitespace.textRange.endOffset
+                        )
+                      )
+                    )
+                }
+                lambda.rBrace?.let {
+                  add(PrettyFoldingDescriptor(it, suffix))
+                  if (!lambda.isMultiline()) {
+                    val rBraceWhitespace = it.prevSibling
+                    if (rBraceWhitespace.text.endsWith(" "))
+                      add(
+                        PrettyFoldingDescriptor(
+                          rBraceWhitespace,
+                          "",
+                          range = TextRange(
+                            rBraceWhitespace.textRange.endOffset - 1,
+                            rBraceWhitespace.textRange.endOffset
+                          )
+                        )
+                      )
+                  }
                 }
               }
             }
@@ -107,16 +153,18 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
 
         override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) = impure {
           super.visitDotQualifiedExpression(expression)
-          val selector = expression.selectorExpression
-          ensure(selector is KtSimpleNameExpression)
-          val reference = selector.mainReference.bind().resolve()
-          ensure(reference is KtAnnotated)
-
-          val annotation = reference.findAnnotation(POSTFIX_FQNAME).bind()
-          val suffix = annotation.valueArguments.singleOrNull().bind().constValue
-          ensure(suffix is String)
-          add(PrettyFoldingDescriptor(expression.allChildren.first { it.elementType == KtTokens.DOT }, suffix))
+          analyze(expression) {
+            val selector = expression.selectorExpression
+            ensure(selector is KtSimpleNameExpression)
+            val reference = selector.mainReference.bind().resolveToSymbol()
+            ensure(reference is KaAnnotated)
+            val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
+            val suffix = annotation.findConstantArgument(POSTFIX_SUFFIX)
+            ensure(suffix is String)
+            add(PrettyFoldingDescriptor(expression.allChildren.first { it.elementType == KtTokens.DOT }, suffix))
+          }
         }
+
       })
     }.toTypedArray()
 
@@ -126,5 +174,5 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
   override fun isCollapsedByDefault(node: ASTNode): Boolean = true
 }
 
-private val ValueArgument.constValue: Any?
-  get() = getArgumentExpression()?.toUElementOfType<UExpression>()?.evaluate()
+private fun KaAnnotation.findConstantArgument(name: Name): Any? =
+  (arguments.find { it.name == name }?.expression as? KaAnnotationValue.ConstantValue)?.value?.value

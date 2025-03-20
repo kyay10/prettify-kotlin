@@ -133,6 +133,7 @@ val runIdeForUiTests by intellijPlatformTesting.runIde.registering {
         "-Dide.mac.message.dialogs.as.sheets=false",
         "-Djb.privacy.policy.text=<!--999.999-->",
         "-Djb.consents.confirmation.enabled=false",
+        "-Didea.kotlin.plugin.use.k2=true",
       )
     }
   }

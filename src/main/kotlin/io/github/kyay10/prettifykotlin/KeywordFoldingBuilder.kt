@@ -15,6 +15,14 @@ private val tokenToReplacement = mapOf(
   KtTokens.NOT_IN to "∉",
   KtTokens.FOR_KEYWORD to "∀",
 )
+private val identifierToReplacement = mapOf(
+  "shl" to "<<",
+  "shr" to ">>",
+  "ushr" to ">>>",
+  "and" to "&",
+  "or" to "|",
+  "xor" to "^",
+)
 
 class KeywordFoldingBuilder : FoldingBuilderEx(), DumbAware {
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
@@ -22,7 +30,11 @@ class KeywordFoldingBuilder : FoldingBuilderEx(), DumbAware {
       root.childLeafs().forEach { element ->
         tokenToReplacement[element.elementType]?.let { replacement ->
           add(PrettyFoldingDescriptor(element, replacement))
-        }
+        } ?: if (element.elementType == KtTokens.IDENTIFIER) {
+          identifierToReplacement[element.text]?.let { replacement ->
+            add(PrettyFoldingDescriptor(element, replacement))
+          }
+        } else Unit
       }
     }.toTypedArray()
 
