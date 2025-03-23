@@ -70,9 +70,8 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             ensure(reference is KaAnnotated)
             impure {
               val annotation = reference.annotations[PREFIX].singleOrNull().bind()
-              val prefix = annotation.findConstantArgument(PREFIX_PREFIX)
-              val suffix = annotation.findConstantArgument(PREFIX_SUFFIX)
-              ensure(prefix is String && suffix is String)
+              val prefix = annotation.findConstantArgument(PREFIX_PREFIX) { "" }
+              val suffix = annotation.findConstantArgument(PREFIX_SUFFIX) { "" }
 
               val (leftPar, rightPar) = expression.valueArgumentList.bind().run {
                 leftParenthesis.bind() to rightParenthesis.bind()
@@ -85,10 +84,9 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
               val reference = call.symbol
               call.argumentMapping.forEach { (arg, param) ->
                 val annotation = param.symbol.annotations[AUTOLAMBDA].singleOrNull() ?: return@forEach
-                val prefix = annotation.findConstantArgument(AUTOLAMBDA_PREFIX)
-                val arrow = annotation.findConstantArgument(AUTOLAMBDA_ARROW)
-                val suffix = annotation.findConstantArgument(AUTOLAMBDA_SUFFIX)
-                ensure(prefix is String && arrow is String && suffix is String)
+                val prefix = annotation.findConstantArgument(AUTOLAMBDA_PREFIX) { "" }
+                val arrow = annotation.findConstantArgument(AUTOLAMBDA_ARROW) { "->" }
+                val suffix = annotation.findConstantArgument(AUTOLAMBDA_SUFFIX) { "" }
                 if (arg !is KtLambdaExpression) return@forEach
                 val lambda = arg.functionLiteral
                 add(prettyFoldingDescriptor(lambda.lBrace, prefix, dependencies = setOf(reference.psi)))
@@ -115,8 +113,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             val reference = selector.mainReference.bind().resolveToSymbol()
             ensure(reference is KaAnnotated)
             val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
-            val suffix = annotation.findConstantArgument(POSTFIX_SUFFIX)
-            ensure(suffix is String)
+            val suffix = annotation.findConstantArgument(POSTFIX_SUFFIX) { "" }
             add(
               prettyFoldingDescriptor(
                 expression.allChildren.first { it.elementType == KtTokens.DOT },
@@ -136,8 +133,14 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
   override fun isCollapsedByDefault(node: ASTNode): Boolean = true
 }
 
-private fun KaAnnotation.findConstantArgument(name: Name): Any? =
-  (arguments.find { it.name == name }?.expression as? KaAnnotationValue.ConstantValue)?.value?.value
+private fun KaAnnotation.findConstantArgument(name: Name): Any? = findConstantArgument(name) { null }
+
+private inline fun <reified T> KaAnnotation.findConstantArgument(name: Name, default: () -> T): T {
+  val constValue = (arguments.find { it.name == name }?.expression as? KaAnnotationValue.ConstantValue)?.value
+  val value = constValue?.value
+  if (constValue == null || value !is T) return default()
+  return value
+}
 
 private val PsiElement.foldForSingleSpaceBefore: FoldingDescriptor?
   get() {
