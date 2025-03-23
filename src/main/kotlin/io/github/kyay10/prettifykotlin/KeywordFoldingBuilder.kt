@@ -29,10 +29,10 @@ class KeywordFoldingBuilder : FoldingBuilderEx(), DumbAware {
     buildList {
       root.childLeafs().forEach { element ->
         tokenToReplacement[element.elementType]?.let { replacement ->
-          add(PrettyFoldingDescriptor(element, replacement))
+          add(prettyFoldingDescriptor(element, replacement))
         } ?: if (element.elementType == KtTokens.IDENTIFIER) {
           identifierToReplacement[element.text]?.let { replacement ->
-            add(PrettyFoldingDescriptor(element, replacement))
+            add(prettyFoldingDescriptor(element, replacement))
           }
         } else Unit
       }

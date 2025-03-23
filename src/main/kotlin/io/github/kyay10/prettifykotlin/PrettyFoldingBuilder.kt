@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotated
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
+import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.util.isMultiline
 import org.jetbrains.kotlin.lexer.KtTokens
@@ -58,7 +59,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             val name = annotation.findConstantArgument(PRETTY_NAME)
             ensure(name is String)
 
-            add(PrettyFoldingDescriptor(expression, name))
+            add(prettyFoldingDescriptor(expression, name, dependencies = setOf(reference.psi)))
           }
         }
 
@@ -76,11 +77,12 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
               val (leftPar, rightPar) = expression.valueArgumentList.bind().run {
                 leftParenthesis.bind() to rightParenthesis.bind()
               }
-              add(PrettyFoldingDescriptor(leftPar, prefix))
-              add(PrettyFoldingDescriptor(rightPar, suffix))
+              add(prettyFoldingDescriptor(leftPar, prefix, dependencies = setOf(reference.psi)))
+              add(prettyFoldingDescriptor(rightPar, suffix, dependencies = setOf(reference.psi)))
             }
             impure {
               val call = expression.resolveToCall()?.successfulFunctionCallOrNull().bind()
+              val reference = call.symbol
               call.argumentMapping.forEach { (arg, param) ->
                 val annotation = param.symbol.annotations[AUTOLAMBDA].singleOrNull() ?: return@forEach
                 val prefix = annotation.findConstantArgument(AUTOLAMBDA_PREFIX)
@@ -89,15 +91,15 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
                 ensure(prefix is String && arrow is String && suffix is String)
                 if (arg !is KtLambdaExpression) return@forEach
                 val lambda = arg.functionLiteral
-                add(PrettyFoldingDescriptor(lambda.lBrace, prefix))
+                add(prettyFoldingDescriptor(lambda.lBrace, prefix, dependencies = setOf(reference.psi)))
                 lambda.lBrace.foldForSingleSpaceAfter?.let(::add)
                 lambda.arrow?.let {
-                  add(PrettyFoldingDescriptor(it, arrow))
+                  add(prettyFoldingDescriptor(it, arrow, dependencies = setOf(reference.psi)))
                   it.foldForSingleSpaceAfter?.let(::add)
                   it.foldForSingleSpaceBefore?.let(::add)
                 }
                 lambda.rBrace?.let {
-                  add(PrettyFoldingDescriptor(it, suffix))
+                  add(prettyFoldingDescriptor(it, suffix, dependencies = setOf(reference.psi)))
                   if (!lambda.isMultiline()) it.foldForSingleSpaceBefore?.let(::add)
                 }
               }
@@ -115,7 +117,13 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
             val suffix = annotation.findConstantArgument(POSTFIX_SUFFIX)
             ensure(suffix is String)
-            add(PrettyFoldingDescriptor(expression.allChildren.first { it.elementType == KtTokens.DOT }, suffix))
+            add(
+              prettyFoldingDescriptor(
+                expression.allChildren.first { it.elementType == KtTokens.DOT },
+                suffix,
+                dependencies = setOf(reference.psi)
+              )
+            )
           }
         }
 
@@ -135,7 +143,7 @@ private val PsiElement.foldForSingleSpaceBefore: FoldingDescriptor?
   get() {
     val whitespace = prevSibling
     return if (whitespace.text.endsWith(" "))
-      PrettyFoldingDescriptor(
+      prettyFoldingDescriptor(
         whitespace, "", range = TextRange(whitespace.textRange.endOffset - 1, whitespace.textRange.endOffset)
       )
     else null
@@ -145,7 +153,7 @@ private val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
   get() {
     val whitespace = nextSibling
     return if (whitespace.text.startsWith(" "))
-      PrettyFoldingDescriptor(
+      prettyFoldingDescriptor(
         whitespace, "", range = TextRange(whitespace.textRange.startOffset, whitespace.textRange.startOffset + 1)
       )
     else null

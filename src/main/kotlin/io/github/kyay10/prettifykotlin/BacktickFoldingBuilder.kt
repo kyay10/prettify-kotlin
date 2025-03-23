@@ -17,7 +17,7 @@ class BacktickFoldingBuilder : FoldingBuilderEx(), DumbAware {
           super.visitSimpleNameExpression(expression)
           if (expression.text.startsWith('`') && expression.text.endsWith('`')) {
             val name = expression.text.substring(1, expression.text.length - 1)
-            add(PrettyFoldingDescriptor(expression, name))
+            add(prettyFoldingDescriptor(expression, name))
           }
         }
       })
