@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.util.isMultiline
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -27,8 +26,6 @@ import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
-import org.jetbrains.kotlin.psi.psiUtil.allChildren
-import org.toml.lang.psi.ext.elementType
 
 val PACKAGE_FQNAME = FqName("io.github.kyay10.prettifykotlin")
 val PRETTY = ClassId(PACKAGE_FQNAME, Name.identifier("Pretty"))
@@ -114,13 +111,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             ensure(reference is KaAnnotated)
             val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
             val suffix = annotation.findConstantArgument(POSTFIX_SUFFIX) { "" }
-            add(
-              prettyFoldingDescriptor(
-                expression.allChildren.first { it.elementType == KtTokens.DOT },
-                suffix,
-                dependencies = setOf(reference.psi)
-              )
-            )
+            add(prettyFoldingDescriptor(expression.operationTokenNode.psi, suffix, dependencies = setOf(reference.psi)))
           }
         }
 
@@ -143,21 +134,11 @@ private inline fun <reified T> KaAnnotation.findConstantArgument(name: Name, def
 }
 
 private val PsiElement.foldForSingleSpaceBefore: FoldingDescriptor?
-  get() {
-    val whitespace = prevSibling
-    return if (whitespace.text.endsWith(" "))
-      prettyFoldingDescriptor(
-        whitespace, "", range = TextRange(whitespace.textRange.endOffset - 1, whitespace.textRange.endOffset)
-      )
-    else null
+  get() = prevSibling.takeIf { it.text.endsWith(" ") }?.let {
+    prettyFoldingDescriptor(it, "", range = TextRange(it.textRange.endOffset - 1, it.textRange.endOffset))
   }
 
 private val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
-  get() {
-    val whitespace = nextSibling
-    return if (whitespace.text.startsWith(" "))
-      prettyFoldingDescriptor(
-        whitespace, "", range = TextRange(whitespace.textRange.startOffset, whitespace.textRange.startOffset + 1)
-      )
-    else null
+  get() = nextSibling.takeIf { it.text.startsWith(" ") }?.let {
+    prettyFoldingDescriptor(it, "", range = TextRange(it.textRange.startOffset, it.textRange.startOffset + 1))
   }
