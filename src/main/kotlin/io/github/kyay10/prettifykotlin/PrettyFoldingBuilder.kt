@@ -13,15 +13,19 @@ import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
+import org.jetbrains.kotlin.idea.completion.reference
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.util.isMultiline
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtLabelReferenceExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
+import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
+import org.jetbrains.kotlin.psi.KtReferenceExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
@@ -30,6 +34,7 @@ import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 val PACKAGE_FQNAME = FqName("io.github.kyay10.prettifykotlin")
 val PRETTY = ClassId(PACKAGE_FQNAME, Name.identifier("Pretty"))
 val PRETTY_NAME = Name.identifier("name")
+val PRETTY_INFIX_ONLY = Name.identifier("infixOnly")
 val PREFIX = ClassId(PACKAGE_FQNAME, Name.identifier("Prefix"))
 val PREFIX_PREFIX = Name.identifier("prefix")
 val PREFIX_SUFFIX = Name.identifier("suffix")
@@ -54,7 +59,12 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             ensure(reference is KaAnnotated)
             val annotation = reference.annotations[PRETTY].singleOrNull().bind()
             val name = annotation.findConstantArgument(PRETTY_NAME)
+            val infixOnly = annotation.findConstantArgument(PRETTY_INFIX_ONLY) { false }
             ensure(name is String)
+            if (infixOnly) {
+              ensure(expression.parent is KtBinaryExpression)
+              ensure(expression is KtOperationReferenceExpression)
+            }
 
             add(prettyFoldingDescriptor(expression, name, dependencies = setOf(reference.psi)))
           }
@@ -105,9 +115,8 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
         override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) = impure {
           super.visitDotQualifiedExpression(expression)
           analyze(expression) {
-            val selector = expression.selectorExpression
-            ensure(selector is KtSimpleNameExpression)
-            val reference = selector.mainReference.bind().resolveToSymbol()
+            val selector = expression.selectorExpression.bind()
+            val reference = selector.reference().bind().resolveToSymbol()
             ensure(reference is KaAnnotated)
             val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
             val suffix = annotation.findConstantArgument(POSTFIX_SUFFIX) { "" }
