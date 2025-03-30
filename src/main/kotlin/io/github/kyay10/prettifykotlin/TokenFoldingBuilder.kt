@@ -35,9 +35,9 @@ class TokenFoldingBuilder : FoldingBuilderEx(), DumbAware {
           return@forEach
         }
         if (element.elementType == KtTokens.IDENTIFIER) {
-          identifierToReplacement.firstNotNullOfOrNull { (regex, replacement) ->
-            element.text.replace(regex, replacement).takeIf { it != element.text }
-          }?.let { replacement ->
+          identifierToReplacement.fold(element.text) { acc, (regex, replacement) ->
+            acc.replace(regex, replacement)
+          }.takeIf { it != element.text }?.let { replacement ->
             add(prettyFoldingDescriptor(element, replacement))
           }
         }
