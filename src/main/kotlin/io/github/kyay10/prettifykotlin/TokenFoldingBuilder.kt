@@ -15,26 +15,32 @@ private val tokenToReplacement = mapOf(
   KtTokens.NOT_IN to "∉",
   KtTokens.FOR_KEYWORD to "∀",
 )
-private val identifierToReplacement = mapOf(
-  "shl" to "<<",
-  "shr" to ">>",
-  "ushr" to ">>>",
-  "and" to "&",
-  "or" to "|",
-  "xor" to "^",
+
+private val identifierToReplacement = listOf(
+  "^shl$".toRegex() to "<<",
+  "^shr$".toRegex() to ">>",
+  "^ushr$".toRegex() to ">>>",
+  "^and$".toRegex() to "&",
+  "^or$".toRegex() to "|",
+  "^xor$".toRegex() to "^",
+  "^`([^`]+)`$".toRegex() to "$1",
 )
 
-class KeywordFoldingBuilder : FoldingBuilderEx(), DumbAware {
+class TokenFoldingBuilder : FoldingBuilderEx(), DumbAware {
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
     buildList {
       root.childLeafs().forEach { element ->
         tokenToReplacement[element.elementType]?.let { replacement ->
           add(prettyFoldingDescriptor(element, replacement))
-        } ?: if (element.elementType == KtTokens.IDENTIFIER) {
-          identifierToReplacement[element.text]?.let { replacement ->
+          return@forEach
+        }
+        if (element.elementType == KtTokens.IDENTIFIER) {
+          identifierToReplacement.firstNotNullOfOrNull { (regex, replacement) ->
+            element.text.replace(regex, replacement).takeIf { it != element.text }
+          }?.let { replacement ->
             add(prettyFoldingDescriptor(element, replacement))
           }
-        } else Unit
+        }
       }
     }.toTypedArray()
 

@@ -22,13 +22,9 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
-import org.jetbrains.kotlin.psi.KtLabelReferenceExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
-import org.jetbrains.kotlin.psi.KtReferenceExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
-import org.jetbrains.kotlin.psi.KtSuperExpression
-import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 
 val PACKAGE_FQNAME = FqName("io.github.kyay10.prettifykotlin")
@@ -53,7 +49,6 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
         override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) = impure {
           super.visitSimpleNameExpression(expression)
 
-          ensure(expression.parent !is KtThisExpression && expression.parent !is KtSuperExpression && expression !is KtLabelReferenceExpression)
           analyze(expression) {
             val reference = expression.mainReference.resolveToSymbol()
             ensure(reference is KaAnnotated)
@@ -66,7 +61,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
               ensure(expression is KtOperationReferenceExpression)
             }
 
-            add(prettyFoldingDescriptor(expression, name, dependencies = setOf(reference.psi)))
+            add(prettyFoldingDescriptor(expression.getReferencedNameElement(), name, dependencies = setOf(reference.psi)))
           }
         }
 

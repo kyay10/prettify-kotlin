@@ -9,8 +9,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.PrettyFoldingBuilder"/>
-        <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.KeywordFoldingBuilder"/>
-        <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.BacktickFoldingBuilder"/>
+        <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.TokenFoldingBuilder"/>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
         <supportsKotlinPluginMode supportsK2="true" />
