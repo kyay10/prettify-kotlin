@@ -120,7 +120,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
         }
 
       })
-    }.toTypedArray()
+    }.filterNotNull().toTypedArray()
 
 
   override fun getPlaceholderText(node: ASTNode) = null

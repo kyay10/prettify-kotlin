@@ -11,4 +11,4 @@ fun prettyFoldingDescriptor(
   dependencies : Set<Any?> = setOf(),
 ) = FoldingDescriptor(node.node, range, null, dependencies, true, placeholder, true).apply {
   setCanBeRemovedWhenCollapsed(true)
-}
+}.takeIf { range.shiftLeft(node.textRange.startOffset).substring(node.text) != placeholder }

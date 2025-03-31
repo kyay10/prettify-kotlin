@@ -35,14 +35,13 @@ class TokenFoldingBuilder : FoldingBuilderEx(), DumbAware {
           return@forEach
         }
         if (element.elementType == KtTokens.IDENTIFIER) {
-          identifierToReplacement.fold(element.text) { acc, (regex, replacement) ->
+          val replacement = identifierToReplacement.fold(element.text) { acc, (regex, replacement) ->
             acc.replace(regex, replacement)
-          }.takeIf { it != element.text }?.let { replacement ->
-            add(prettyFoldingDescriptor(element, replacement))
           }
+          add(prettyFoldingDescriptor(element, replacement))
         }
       }
-    }.toTypedArray()
+    }.filterNotNull().toTypedArray()
 
   override fun getPlaceholderText(node: ASTNode) = null
 
