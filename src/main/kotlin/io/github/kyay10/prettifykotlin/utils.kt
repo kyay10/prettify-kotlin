@@ -14,7 +14,7 @@ fun prettyFoldingDescriptor(
   dependencies : Set<Any?> = setOf(),
 ) = FoldingDescriptor(node.node, range, null, dependencies, true, placeholder, true).apply {
   setCanBeRemovedWhenCollapsed(true)
-}.takeIf { range.shiftLeft(node.textRange.startOffset).substring(node.text) != placeholder }
+}.takeIf { (range shl node.textRange.startOffset).substring(node.text) != placeholder }
 
 fun KaAnnotation.findConstantArgument(name: Name): Any? = findConstantArgument(name) { null }
 
@@ -25,12 +25,17 @@ inline fun <reified T> KaAnnotation.findConstantArgument(name: Name, default: ()
   return value
 }
 
+private val singleCharacterRange = TextRange(0, 1)
+
+infix fun TextRange.shr(delta: Int) = shiftRight(delta)
+infix fun TextRange.shl(delta: Int) = shiftLeft(delta)
+
 val PsiElement.foldForSingleSpaceBefore: FoldingDescriptor?
   get() = prevSibling.takeIf { it.text.endsWith(" ") }?.let {
-    prettyFoldingDescriptor(it, "", range = TextRange(it.textRange.endOffset - 1, it.textRange.endOffset))
+    prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.endOffset - 1)
   }
 
 val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
   get() = nextSibling.takeIf { it.text.startsWith(" ") }?.let {
-    prettyFoldingDescriptor(it, "", range = TextRange(it.textRange.startOffset, it.textRange.startOffset + 1))
+    prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.startOffset)
   }
