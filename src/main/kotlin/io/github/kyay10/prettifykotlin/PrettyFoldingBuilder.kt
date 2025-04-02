@@ -5,12 +5,9 @@ import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
 import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotated
-import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
-import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.idea.completion.reference
@@ -127,22 +124,3 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
 
   override fun isCollapsedByDefault(node: ASTNode): Boolean = true
 }
-
-private fun KaAnnotation.findConstantArgument(name: Name): Any? = findConstantArgument(name) { null }
-
-private inline fun <reified T> KaAnnotation.findConstantArgument(name: Name, default: () -> T): T {
-  val constValue = (arguments.find { it.name == name }?.expression as? KaAnnotationValue.ConstantValue)?.value
-  val value = constValue?.value
-  if (constValue == null || value !is T) return default()
-  return value
-}
-
-private val PsiElement.foldForSingleSpaceBefore: FoldingDescriptor?
-  get() = prevSibling.takeIf { it.text.endsWith(" ") }?.let {
-    prettyFoldingDescriptor(it, "", range = TextRange(it.textRange.endOffset - 1, it.textRange.endOffset))
-  }
-
-private val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
-  get() = nextSibling.takeIf { it.text.startsWith(" ") }?.let {
-    prettyFoldingDescriptor(it, "", range = TextRange(it.textRange.startOffset, it.textRange.startOffset + 1))
-  }
