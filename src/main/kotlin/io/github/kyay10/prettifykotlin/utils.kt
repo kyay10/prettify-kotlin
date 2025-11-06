@@ -5,6 +5,8 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
+import org.jetbrains.kotlin.lexer.KtSingleValueToken
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 
 fun prettyFoldingDescriptor(
@@ -39,3 +41,8 @@ val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
   get() = nextSibling.takeIf { it.text.startsWith(" ") }?.let {
     prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.startOffset)
   }
+
+val allKeywords = buildList {
+  addAll(KtTokens.KEYWORDS.types)
+  addAll(KtTokens.SOFT_KEYWORDS.types)
+}.filterIsInstance<KtSingleValueToken>().associateBy { it.value }

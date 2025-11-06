@@ -10,6 +10,14 @@
     <extensions defaultExtensionNs="com.intellij">
         <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.PrettyFoldingBuilder"/>
         <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.TokenFoldingBuilder"/>
+
+        <applicationConfigurable
+                parentId="tools"
+                instance="io.github.kyay10.prettifykotlin.AppSettingsConfigurable"
+                id="com.example.ApplicationSettingsConfigurable"
+                displayName="Prettify Kotlin"/>
+        <applicationService
+                serviceImplementation="io.github.kyay10.prettifykotlin.AppSettings"/>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
         <supportsKotlinPluginMode supportsK2="true" />

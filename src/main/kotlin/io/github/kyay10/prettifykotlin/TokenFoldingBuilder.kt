@@ -7,35 +7,19 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.DumbAware
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.childLeafs
+import com.intellij.psi.util.elementType
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.toml.lang.psi.ext.elementType
-
-private val tokenToReplacement = mapOf(
-  KtTokens.IN_KEYWORD to "∈",
-  KtTokens.NOT_IN to "∉",
-  KtTokens.FOR_KEYWORD to "∀",
-)
-
-private val identifierToReplacement = listOf(
-  "^shl$".toRegex() to "<<",
-  "^shr$".toRegex() to ">>",
-  "^ushr$".toRegex() to ">>>",
-  "^and$".toRegex() to "&",
-  "^or$".toRegex() to "|",
-  "^xor$".toRegex() to "^",
-  "^`([^`]+)`$".toRegex() to "$1",
-)
 
 class TokenFoldingBuilder : FoldingBuilderEx(), DumbAware {
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
     buildList {
       root.childLeafs().forEach { element ->
-        tokenToReplacement[element.elementType]?.let { replacement ->
+        AppSettings.instance!!.state.tokenToReplacement[element.elementType]?.let { replacement ->
           add(prettyFoldingDescriptor(element, replacement))
           return@forEach
         }
         if (element.elementType == KtTokens.IDENTIFIER) {
-          val replacement = identifierToReplacement.fold(element.text) { acc, (regex, replacement) ->
+          val replacement = AppSettings.instance!!.state.identifierToReplacement.fold(element.text) { acc, (regex, replacement) ->
             acc.replace(regex, replacement)
           }
           add(prettyFoldingDescriptor(element, replacement))
