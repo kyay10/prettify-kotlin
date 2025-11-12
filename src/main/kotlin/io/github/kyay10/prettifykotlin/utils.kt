@@ -1,19 +1,28 @@
 package io.github.kyay10.prettifykotlin
 
+import arrow.optics.Lens
+import com.intellij.codeInsight.folding.CodeFoldingManager
 import com.intellij.lang.folding.FoldingDescriptor
+import com.intellij.openapi.components.SerializablePersistentStateComponent
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
+import com.intellij.util.ui.ColumnInfo
+import com.intellij.util.ui.table.TableModelEditor.EditableColumnInfo
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
 import org.jetbrains.kotlin.lexer.KtSingleValueToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
+import kotlin.reflect.KMutableProperty1
+import kotlin.reflect.KProperty
 
 fun prettyFoldingDescriptor(
   node: PsiElement,
   placeholder: String,
   range: TextRange = node.textRange,
-  dependencies : Set<Any?> = setOf(),
+  dependencies: Set<Any?> = setOf(),
 ) = FoldingDescriptor(node.node, range, null, dependencies, true, placeholder, true).apply {
   setCanBeRemovedWhenCollapsed(true)
 }.takeIf { (range shl node.textRange.startOffset).substring(node.text) != placeholder }
@@ -45,4 +54,36 @@ val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
 val allKeywords = buildList {
   addAll(KtTokens.KEYWORDS.types)
   addAll(KtTokens.SOFT_KEYWORDS.types)
-}.filterIsInstance<KtSingleValueToken>().associateBy { it.value }
+}.filterIsInstance<KtSingleValueToken>().associateBy { it.value }.toSortedMap()
+
+fun Project.updateFoldings() {
+  EditorFactory.getInstance().allEditors.forEach { editor ->
+    if (editor.virtualFile?.extension == "kt" && editor.project == this)
+      CodeFoldingManager.getInstance(this).scheduleAsyncFoldingUpdate(editor)
+  }
+}
+
+abstract class OpticsStateComponent<T : Any>(state: T) : SerializablePersistentStateComponent<T>(state) {
+  fun <A> Lens<T, A>.update(value: A) {
+    updateState { set(it, value) }
+  }
+}
+
+operator fun <T : Any, A> Lens<T, A>.getValue(thisRef: OpticsStateComponent<T>, p: KProperty<*>): A =
+  get(thisRef.state)
+
+operator fun <T : Any, A> Lens<T, A>.setValue(thisRef: OpticsStateComponent<T>, p: KProperty<*>, value: A) =
+  with(thisRef) { update(value) }
+
+inline fun <T : Any, reified A> columnInfo(name: String, crossinline value: T.() -> A) =
+  object : ColumnInfo<T, A>(name) {
+    override fun getColumnClass() = A::class.java
+    override fun valueOf(item: T) = item.value()
+  }
+
+inline fun <T : Any, reified A> columnInfo(name: String, prop: KMutableProperty1<T, A>) =
+  object : EditableColumnInfo<T, A>(name) {
+    override fun getColumnClass() = A::class.java
+    override fun valueOf(item: T) = prop(item)
+    override fun setValue(item: T, value: A) = prop.set(item, value)
+  }

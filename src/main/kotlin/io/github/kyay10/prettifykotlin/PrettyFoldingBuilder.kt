@@ -4,6 +4,7 @@ import arrow.core.raise.impure
 import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
 import com.intellij.lang.folding.FoldingDescriptor
+import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.analysis.api.analyze
@@ -40,7 +41,7 @@ val AUTOLAMBDA_SUFFIX = Name.identifier("suffix")
 
 class PrettyFoldingBuilder : FoldingBuilderEx() {
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
-    if (quick) emptyArray()
+    if (quick || !root.project.service<Settings>().isEnabled) emptyArray()
     else buildList {
       root.accept(object : KtTreeVisitorVoid() {
         override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) = impure {

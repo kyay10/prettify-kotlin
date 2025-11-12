@@ -8,18 +8,27 @@
     <depends>org.jetbrains.kotlin</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.PrettyFoldingBuilder"/>
-        <lang.foldingBuilder language="kotlin" implementationClass="io.github.kyay10.prettifykotlin.TokenFoldingBuilder"/>
+        <lang.foldingBuilder language="kotlin"
+                             implementationClass="io.github.kyay10.prettifykotlin.PrettyFoldingBuilder"/>
+        <lang.foldingBuilder language="kotlin"
+                             implementationClass="io.github.kyay10.prettifykotlin.TokenFoldingBuilder"/>
 
-        <applicationConfigurable
+        <projectConfigurable
                 parentId="tools"
-                instance="io.github.kyay10.prettifykotlin.AppSettingsConfigurable"
-                id="com.example.ApplicationSettingsConfigurable"
-                displayName="Prettify Kotlin"/>
-        <applicationService
-                serviceImplementation="io.github.kyay10.prettifykotlin.AppSettings"/>
+                id="io.github.kyay10.prettifykotlin.settings"
+                instance="io.github.kyay10.prettifykotlin.SettingsConfigurable"
+                displayName="Prettify Kotlin">
+            <configurable
+                    id="io.github.kyay10.prettifykotlin.settings.identifiers"
+                    displayName="Identifiers"
+                    instance="io.github.kyay10.prettifykotlin.IdentifierSettingsConfigurable"/>
+            <configurable
+                    id="io.github.kyay10.prettifykotlin.settings.tokens"
+                    displayName="Tokens"
+                    instance="io.github.kyay10.prettifykotlin.TokenSettingsConfigurable"/>
+        </projectConfigurable>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
-        <supportsKotlinPluginMode supportsK2="true" />
+        <supportsKotlinPluginMode supportsK2="true"/>
     </extensions>
 </idea-plugin>

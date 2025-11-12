@@ -1,130 +1,141 @@
+@file:Suppress("CompanionObjectInExtension")
+
 package io.github.kyay10.prettifykotlin
 
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.components.BaseState
-import com.intellij.openapi.components.SimplePersistentStateComponent
+import arrow.optics.optics
+import com.intellij.ide.DataManager.getInstance
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
-import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.components.service
+import com.intellij.openapi.options.BoundSearchableConfigurable
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.NlsContexts
-import com.intellij.ui.components.JBCheckBox
-import com.intellij.util.ui.FormBuilder
-import com.intellij.util.xmlb.Converter
+import com.intellij.ui.dsl.builder.Align
+import com.intellij.ui.dsl.builder.BottomGap
+import com.intellij.ui.dsl.builder.bindSelected
+import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.builder.toMutableProperty
+import com.intellij.ui.dsl.gridLayout.UnscaledGaps
+import com.intellij.ui.table.TableView
+import com.intellij.util.ui.ListItemEditor
+import com.intellij.util.ui.ListTableModel
+import com.intellij.util.ui.table.TableModelEditor
 import com.intellij.util.xmlb.annotations.Attribute
 import com.intellij.util.xmlb.annotations.XCollection
-import org.jetbrains.annotations.Nls
+import com.intellij.util.xmlb.annotations.XMap
 import org.jetbrains.kotlin.lexer.KtSingleValueToken
-import org.jetbrains.kotlin.lexer.KtTokens
-import javax.swing.JComponent
-import javax.swing.JPanel
+import java.awt.Component
+import java.io.Serializable
+import com.intellij.openapi.options.ex.Settings.KEY as SettingsKey
 
-data class RegexToReplacement(
-  @Attribute(converter = RegexConverter::class)
-  val regex: Regex,
-  val replacement: String,
-)
+data class RegexEntry(@Attribute var regex: String = "", @Attribute var replacement: String = "")
+data class TokenEntry(val token: KtSingleValueToken, var replacement: String = "")
 
-private val defaultTokenReplacements = mapOf(
-  KtTokens.IN_KEYWORD to "∈",
-  KtTokens.NOT_IN to "∉",
-  KtTokens.FOR_KEYWORD to "∀",
-)
+@Service(Service.Level.PROJECT)
+@State(name = "io.github.kyay10.prettifykotlin.Settings", storages = [Storage("prettify_kotlin.xml")])
+class Settings : OpticsStateComponent<Settings.State>(State()) {
+  @optics
+  data class State(
+    @Attribute("enabled") val isEnabled: Boolean = true,
+    @XMap val tokenToReplacement: Map<String, String> = emptyMap(),
+    @XCollection(style = XCollection.Style.v2) val identifierToReplacement: List<RegexEntry> = emptyList(),
+  ) : Serializable
 
-private val defaultIdentifierReplacements = mapOf(
-  "^shl$".toRegex() to "<<",
-  "^shr$".toRegex() to ">>",
-  "^ushr$".toRegex() to ">>>",
-  "^and$".toRegex() to "&",
-  "^or$".toRegex() to "|",
-  "^xor$".toRegex() to "^",
-  "^`([^`]+)`$".toRegex() to "$1",
-)
-
-@State(name = "io.github.kyay10.prettifykotlin.AppSettings", storages = [Storage("PrettifyKotlinPlugin.xml")])
-internal class AppSettings : SimplePersistentStateComponent<AppSettings.State>(State()) {
-
-  internal data class State(
-    var isEnabled: Boolean = true,
-    @Attribute(converter = KtSingleValueTokenConverter::class)
-    val tokenToReplacement: MutableMap<KtSingleValueToken, String> = mutableMapOf(),
-
-    @XCollection(style = XCollection.Style.v2)
-    val identifierToReplacement: MutableList<Pair<Regex, String>> = mutableListOf()
-  ) : BaseState()
-
-  companion object {
-    val instance: AppSettings?
-      get() = ApplicationManager.getApplication()
-        .getService(AppSettings::class.java)
-
-  }
+  var isEnabled by State.isEnabled
+  var tokenToReplacement by State.tokenToReplacement
+  var identifierToReplacement by State.identifierToReplacement
 }
 
-object RegexConverter : Converter<Regex>() {
-  override fun fromString(value: String): Regex = value.toRegex()
-
-  override fun toString(value: Regex): String = value.pattern
-}
-
-object KtSingleValueTokenConverter : Converter<KtSingleValueToken>() {
-  override fun fromString(value: String): KtSingleValueToken? = allKeywords[value]
-
-  override fun toString(value: KtSingleValueToken): String = value.value
-}
-
-/**
- * Supports creating and managing a [JPanel] for the Settings Dialog.
- */
-class AppSettingsComponent {
-  private val enabled = JBCheckBox("Enable prettification", true)
-  val panel: JPanel = FormBuilder.createFormBuilder().apply {
-    addComponent(enabled, 1)
-    addComponentFillVertically(JPanel(), 0)
-  }.panel
-
-
-  var isEnabled: Boolean
-    get() = enabled.isSelected
-    set(value) {
-      enabled.isSelected = value
-    }
-}
-
-/**
- * Provides controller functionality for application settings.
- */
-internal class AppSettingsConfigurable : Configurable {
-  private var _component: AppSettingsComponent? = null
-  private val component: AppSettingsComponent
-    get() = _component!!
-
-  @Nls(capitalization = Nls.Capitalization.Title)
-  override fun getDisplayName(): @NlsContexts.ConfigurableName String = "SDK: Application Settings Example"
-
-  override fun getPreferredFocusedComponent() = null
-
-  override fun createComponent(): JComponent {
-    _component = AppSettingsComponent()
-    return component.panel
-  }
-
-  override fun isModified(): Boolean {
-    val state: AppSettings.State = AppSettings.instance?.state!!
-    return state.isEnabled != component.isEnabled
-  }
-
-
+abstract class BaseSettingsConfigurable(val project: Project, details: Details) :
+  BoundSearchableConfigurable(details.displayName, details.id) {
+  val settings = project.service<Settings>()
   override fun apply() {
-    AppSettings.instance?.state!!.apply {
-      isEnabled = component.isEnabled
+    super.apply()
+    project.updateFoldings()
+  }
+
+  abstract class Details(
+    @NlsContexts.ConfigurableName val displayName: String,
+    suffix: String
+  ) {
+    val id: String = "io.github.kyay10.prettifykotlin.settings$suffix"
+  }
+}
+
+class SettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
+  companion object : Details("Prettify Kotlin", "")
+
+  override fun createPanel() = panel {
+    row { checkBox("Enable prettification").bindSelected(settings::isEnabled).focused() }.bottomGap(BottomGap.SMALL)
+    panel {
+      indent {
+        for (configurable in listOf(IdentifierSettingsConfigurable, TokenSettingsConfigurable)) {
+          row {
+            @Suppress("DialogTitleCapitalization")
+            link(configurable.displayName) { event ->
+              val component = event.source as? Component
+              val settings = SettingsKey.getData(getInstance().getDataContext(component)) ?: return@link
+              settings.find(configurable.id)?.let(settings::select)
+            }.customize(UnscaledGaps(bottom = 4))
+          }
+        }
+      }
     }
   }
+}
 
-  override fun reset() = with(AppSettings.instance?.state!!) {
-    component.isEnabled = isEnabled
+class IdentifierSettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
+  companion object : Details("Identifiers", ".identifiers")
+
+  // TODO validation
+  private val identifierEditor =
+    TableModelEditor(
+      arrayOf(columnInfo("Regex", RegexEntry::regex), columnInfo("Replacement", RegexEntry::replacement)),
+      object : ListItemEditor<RegexEntry> {
+        override fun getItemClass() = RegexEntry::class.java
+        override fun clone(item: RegexEntry, forInPlaceEditing: Boolean) = item.copy()
+      }, "No replacements yet"
+    )
+
+  override fun createPanel() = panel {
+    row {
+      cell(identifierEditor.createComponent())
+        .align(Align.FILL)
+        .focused()
+        .bind(
+          { identifierEditor.model.items },
+          { _, items -> identifierEditor.model.items = items.mapTo(ArrayList(items.size)) { it.copy() } },
+          settings::identifierToReplacement.toMutableProperty(),
+        )
+    }.resizableRow()
   }
+}
 
-  override fun disposeUIResources() {
-    _component = null
+class TokenSettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
+  companion object : Details("Tokens", ".tokens")
+
+  private val tokenModel = ListTableModel<TokenEntry>(
+    columnInfo("Token", TokenEntry::token),
+    columnInfo("Replacement", TokenEntry::replacement)
+  )
+  private val tokenTable = TableView(tokenModel)
+
+  override fun createPanel() = panel {
+    row {
+      scrollCell(tokenTable)
+        .align(Align.FILL)
+        .focused()
+        .bind(
+          {
+            tokenModel.items.filter { it.replacement != "" }
+              .associate { (token, replacement) -> token.value to replacement }
+          },
+          { _, map ->
+            tokenModel.items = allKeywords.values.map { TokenEntry(it, map[it.value] ?: "") }.toMutableList()
+          },
+          settings::tokenToReplacement.toMutableProperty()
+        )
+    }.resizableRow()
   }
 }
