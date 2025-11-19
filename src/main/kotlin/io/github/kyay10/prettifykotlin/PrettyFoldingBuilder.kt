@@ -3,7 +3,6 @@ package io.github.kyay10.prettifykotlin
 import arrow.core.raise.impure
 import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
-import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
 import com.intellij.psi.PsiElement
@@ -40,7 +39,7 @@ val AUTOLAMBDA_ARROW = Name.identifier("arrow")
 val AUTOLAMBDA_SUFFIX = Name.identifier("suffix")
 
 class PrettyFoldingBuilder : FoldingBuilderEx() {
-  override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
+  override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean) = with(document) {
     if (quick || !root.project.service<Settings>().isEnabled) emptyArray()
     else buildList {
       root.accept(object : KtTreeVisitorVoid() {
@@ -119,6 +118,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
 
       })
     }.filterNotNull().toTypedArray()
+  }
 
 
   override fun getPlaceholderText(node: ASTNode) = null

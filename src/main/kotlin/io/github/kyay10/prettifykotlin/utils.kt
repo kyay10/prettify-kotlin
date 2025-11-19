@@ -4,7 +4,10 @@ import arrow.optics.Lens
 import com.intellij.codeInsight.folding.CodeFoldingManager
 import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.components.SerializablePersistentStateComponent
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.ex.RangeHighlighterEx
+import com.intellij.openapi.editor.impl.DocumentMarkupModel
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
@@ -18,14 +21,23 @@ import org.jetbrains.kotlin.name.Name
 import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty
 
-fun prettyFoldingDescriptor(
+fun Document?.prettyFoldingDescriptor(
   node: PsiElement,
   placeholder: String,
   range: TextRange = node.textRange,
   dependencies: Set<Any?> = setOf(),
 ) = FoldingDescriptor(node.node, range, null, dependencies, true, placeholder, true).apply {
   setCanBeRemovedWhenCollapsed(true)
-}.takeIf { (range shl node.textRange.startOffset).substring(node.text) != placeholder }
+}.takeIf { (range shl node.textRange.startOffset).substring(node.text) != placeholder }?.also {
+  this ?: return@also
+  for (highlighter in EditorFactory.getInstance().getEditors(this, node.project)
+    .flatMap { it.markupModel.allHighlighters.toList() } +
+    DocumentMarkupModel.forDocument(this, node.project, false).allHighlighters) {
+    if (highlighter.textRange.intersects(range) && highlighter is RangeHighlighterEx) {
+      highlighter.isVisibleIfFolded = true
+    }
+  }
+}
 
 fun KaAnnotation.findConstantArgument(name: Name): Any? = findConstantArgument(name) { null }
 
@@ -43,12 +55,12 @@ infix fun TextRange.shl(delta: Int) = shiftLeft(delta)
 
 val PsiElement.foldForSingleSpaceBefore: FoldingDescriptor?
   get() = prevSibling.takeIf { it.text.endsWith(" ") }?.let {
-    prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.endOffset - 1)
+    null.prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.endOffset - 1)
   }
 
 val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
   get() = nextSibling.takeIf { it.text.startsWith(" ") }?.let {
-    prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.startOffset)
+    null.prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.startOffset)
   }
 
 val allKeywords = buildList {

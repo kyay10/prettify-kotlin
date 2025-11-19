@@ -2,7 +2,6 @@ package io.github.kyay10.prettifykotlin
 
 import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
-import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.DumbAware
@@ -14,7 +13,7 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import java.util.regex.PatternSyntaxException
 
 class TokenFoldingBuilder : FoldingBuilderEx(), DumbAware {
-  override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
+  override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean) = with(document) {
     buildList {
       val state = root.project.service<Settings>()
       if (!state.isEnabled) return@buildList
@@ -36,6 +35,7 @@ class TokenFoldingBuilder : FoldingBuilderEx(), DumbAware {
         }
       }
     }.filterNotNull().toTypedArray()
+  }
 
   override fun getPlaceholderText(node: ASTNode) = null
 
