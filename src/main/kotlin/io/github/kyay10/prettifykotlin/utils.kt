@@ -5,6 +5,7 @@ import com.intellij.codeInsight.folding.CodeFoldingManager
 import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.components.SerializablePersistentStateComponent
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.openapi.editor.impl.DocumentMarkupModel
@@ -32,7 +33,7 @@ fun Document?.prettyFoldingDescriptor(
   this ?: return@also
   for (highlighter in EditorFactory.getInstance().getEditors(this, node.project)
     .flatMap { it.markupModel.allHighlighters.toList() } +
-    DocumentMarkupModel.forDocument(this, node.project, false).allHighlighters) {
+    DocumentMarkupModel.forDocument(this, node.project, false)?.allHighlighters.orEmpty()) {
     if (highlighter.textRange.intersects(range) && highlighter is RangeHighlighterEx) {
       highlighter.isVisibleIfFolded = true
     }
@@ -69,10 +70,15 @@ val allKeywords = buildList {
 }.filterIsInstance<KtSingleValueToken>().associateBy { it.value }.toSortedMap()
 
 fun Project.updateFoldings() {
-  EditorFactory.getInstance().allEditors.forEach { editor ->
-    if (editor.virtualFile?.extension == "kt" && editor.project == this)
-      CodeFoldingManager.getInstance(this).scheduleAsyncFoldingUpdate(editor)
+  EditorFactory.getInstance().allEditors.forEach {
+    if (it.project == this) it.updateFoldings()
   }
+}
+
+fun Editor.updateFoldings() {
+  val project = this.project ?: return
+  if (this.virtualFile?.extension == "kt")
+    CodeFoldingManager.getInstance(project).scheduleAsyncFoldingUpdate(this)
 }
 
 abstract class OpticsStateComponent<T : Any>(state: T) : SerializablePersistentStateComponent<T>(state) {

@@ -5,6 +5,11 @@ import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.event.BulkAwareDocumentListener
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotated
@@ -23,6 +28,7 @@ import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
+import java.util.WeakHashMap
 
 val PACKAGE_FQNAME = FqName("io.github.kyay10.prettifykotlin")
 val PRETTY = ClassId(PACKAGE_FQNAME, Name.identifier("Pretty"))
@@ -39,8 +45,27 @@ val AUTOLAMBDA_ARROW = Name.identifier("arrow")
 val AUTOLAMBDA_SUFFIX = Name.identifier("suffix")
 
 class PrettyFoldingBuilder : FoldingBuilderEx() {
+  private val listener = object: BulkAwareDocumentListener.Simple {
+    val effectMap = WeakHashMap<Document, MutableSet<Document>>()
+    override fun documentChanged(event: DocumentEvent) {
+      effectMap[event.document]?.forEach {
+        EditorFactory.getInstance().getEditors(it).forEach(Editor::updateFoldings)
+      }
+    }
+  }
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean) = with(document) {
-    if (quick || !root.project.service<Settings>().isEnabled) emptyArray()
+    val project = root.project
+    val psiDocumentManager = PsiDocumentManager.getInstance(project)
+    fun PsiElement.addListenerIfNecessary() {
+      val file = this.containingFile ?: return
+      psiDocumentManager.getCachedDocument(file)?.let {
+        listener.effectMap.getOrPut(it) {
+          it.addDocumentListener(listener)
+          mutableSetOf()
+        }.add(document)
+      }
+    }
+    if (quick || !project.service<Settings>().isEnabled) emptyArray()
     else buildList {
       root.accept(object : KtTreeVisitorVoid() {
         override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) = impure {
@@ -48,6 +73,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
 
           analyze(expression) {
             val reference = expression.mainReference.resolveToSymbol()
+            reference?.psi?.addListenerIfNecessary()
             ensure(reference is KaAnnotated)
             val annotation = reference.annotations[PRETTY].singleOrNull().bind()
             val name = annotation.findConstantArgument(PRETTY_NAME)
@@ -58,7 +84,13 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
               ensure(expression is KtOperationReferenceExpression)
             }
 
-            add(prettyFoldingDescriptor(expression.getReferencedNameElement(), name, dependencies = setOf(reference.psi)))
+            add(
+              prettyFoldingDescriptor(
+                expression.getReferencedNameElement(),
+                name,
+                dependencies = setOf(reference.psi)
+              )
+            )
           }
         }
 
@@ -66,6 +98,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
           super.visitCallExpression(expression)
           analyze(expression) {
             val reference = expression.calleeExpression.bind().mainReference.bind().resolveToSymbol()
+            reference?.psi?.addListenerIfNecessary()
             ensure(reference is KaAnnotated)
             impure {
               val annotation = reference.annotations[PREFIX].singleOrNull().bind()
@@ -81,6 +114,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             impure {
               val call = expression.resolveToCall()?.successfulFunctionCallOrNull().bind()
               val reference = call.symbol
+              reference.psi?.addListenerIfNecessary()
               call.argumentMapping.forEach { (arg, param) ->
                 val annotation = param.symbol.annotations[AUTOLAMBDA].singleOrNull() ?: return@forEach
                 val prefix = annotation.findConstantArgument(AUTOLAMBDA_PREFIX) { "" }
@@ -109,6 +143,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
           analyze(expression) {
             val selector = expression.selectorExpression.bind()
             val reference = selector.reference().bind().resolveToSymbol()
+            reference?.psi?.addListenerIfNecessary()
             ensure(reference is KaAnnotated)
             val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
             val suffix = annotation.findConstantArgument(POSTFIX_SUFFIX) { "" }
