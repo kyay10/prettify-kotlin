@@ -10,16 +10,24 @@ import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.openapi.editor.impl.DocumentMarkupModel
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.NlsContexts.ColumnName
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
+import com.intellij.psi.tree.IElementType
+import com.intellij.ui.TableSpeedSearch
+import com.intellij.ui.dsl.builder.Cell
+import com.intellij.ui.dsl.builder.MutableProperty
+import com.intellij.ui.dsl.builder.toMutableProperty
+import com.intellij.ui.table.TableView
 import com.intellij.util.ui.ColumnInfo
-import com.intellij.util.ui.table.TableModelEditor.EditableColumnInfo
+import com.intellij.util.ui.ImmutableColumnInfo
+import com.intellij.util.ui.ListTableModel
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
 import org.jetbrains.kotlin.lexer.KtSingleValueToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
-import kotlin.reflect.KMutableProperty1
+import kotlin.reflect.KMutableProperty0
 import kotlin.reflect.KProperty
 
 fun Document?.prettyFoldingDescriptor(
@@ -64,10 +72,12 @@ val PsiElement.foldForSingleSpaceAfter: FoldingDescriptor?
     null.prettyFoldingDescriptor(it, "", range = singleCharacterRange shr it.textRange.startOffset)
   }
 
-val allKeywords = buildList {
-  addAll(KtTokens.KEYWORDS.types)
-  addAll(KtTokens.SOFT_KEYWORDS.types)
-}.filterIsInstance<KtSingleValueToken>().associateBy { it.value }.toSortedMap()
+// Handle "as?" token properly. This is fixed in Kotlin 2.3.0-RC, so we make sure our representation matches that.
+val KtSingleValueToken.code get() = if (this == KtTokens.AS_SAFE) "as?" else value
+
+@Suppress("UNCHECKED_CAST")
+val allKeywords = (IElementType.enumerate { it is KtSingleValueToken }.toList() as List<KtSingleValueToken>)
+  .associateBy { it.code }.toSortedMap()
 
 fun Project.updateFoldings() {
   EditorFactory.getInstance().allEditors.forEach {
@@ -93,15 +103,35 @@ operator fun <T : Any, A> Lens<T, A>.getValue(thisRef: OpticsStateComponent<T>, 
 operator fun <T : Any, A> Lens<T, A>.setValue(thisRef: OpticsStateComponent<T>, p: KProperty<*>, value: A) =
   with(thisRef) { update(value) }
 
-inline fun <T : Any, reified A> columnInfo(name: String, crossinline value: T.() -> A) =
+fun <Item> listTableModel(vararg columns: ColumnInfo<Item, *>) = ListTableModel<Item>(*columns)
+
+fun <Item> tableView(model: ListTableModel<Item>, emptyText: String = "") = TableView(model).apply {
+  this.emptyText.text = emptyText
+  TableSpeedSearch.installOn(this)
+}
+
+fun <Item> Cell<*>.bindItems(model: ListTableModel<Item>, property: MutableProperty<List<Item>>) =
+  bind({ model.items }, { _, items -> model.items = items.toMutableList() }, property)
+
+fun <Item> Cell<*>.bindItems(model: ListTableModel<Item>, property: KMutableProperty0<List<Item>>) =
+  bindItems(model, property.toMutableProperty())
+
+fun <Item> Cell<*>.bindItems(model: ListTableModel<Item>, get: () -> List<Item>, set: (List<Item>) -> Unit) =
+  bindItems(model, MutableProperty(get, set))
+
+inline infix fun <T : Any, reified A> (T.() -> A).columnInfo(@ColumnName name: String) =
   object : ColumnInfo<T, A>(name) {
     override fun getColumnClass() = A::class.java
-    override fun valueOf(item: T) = item.value()
+    override fun valueOf(item: T) = this@columnInfo(item)
   }
 
-inline fun <T : Any, reified A> columnInfo(name: String, prop: KMutableProperty1<T, A>) =
-  object : EditableColumnInfo<T, A>(name) {
+inline infix fun <T : Any, reified A> Lens<T, A>.columnInfo(@ColumnName name: String) =
+  object : ImmutableColumnInfo<T, A>(name) {
     override fun getColumnClass() = A::class.java
-    override fun valueOf(item: T) = prop(item)
-    override fun setValue(item: T, value: A) = prop.set(item, value)
+    override fun isCellEditable(item: T) = true
+    override fun valueOf(item: T) = get(item)
+    override fun withValue(item: T, value: A) = set(item, value)
+    override fun setValue(item: T, value: A) {
+      throw UnsupportedOperationException()
+    }
   }

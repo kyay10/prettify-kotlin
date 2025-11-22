@@ -11,16 +11,16 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.NlsContexts
+import com.intellij.ui.TableSpeedSearch
+import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.BottomGap
+import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
-import com.intellij.ui.dsl.builder.toMutableProperty
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import com.intellij.ui.table.TableView
-import com.intellij.util.ui.ListItemEditor
-import com.intellij.util.ui.ListTableModel
-import com.intellij.util.ui.table.TableModelEditor
+import com.intellij.util.ui.ElementProducer
 import com.intellij.util.xmlb.annotations.Attribute
 import com.intellij.util.xmlb.annotations.XCollection
 import com.intellij.util.xmlb.annotations.XMap
@@ -29,8 +29,13 @@ import java.awt.Component
 import java.io.Serializable
 import com.intellij.openapi.options.ex.Settings.KEY as SettingsKey
 
-data class RegexEntry(@Attribute var regex: String = "", @Attribute var replacement: String = "")
-data class TokenEntry(val token: KtSingleValueToken, var replacement: String = "")
+@optics
+data class RegexEntry(@Attribute val regex: String = "", @Attribute val replacement: String = "")
+
+@optics
+data class TokenEntry(val token: KtSingleValueToken, val replacement: String) {
+  val code get() = token.code
+}
 
 @Service(Service.Level.PROJECT)
 @State(name = "io.github.kyay10.prettifykotlin.Settings", storages = [Storage("prettify_kotlin.xml")])
@@ -55,9 +60,11 @@ abstract class BaseSettingsConfigurable(val project: Project, details: Details) 
     project.updateFoldings()
   }
 
+  abstract fun Panel.fill(): Any?
+  final override fun createPanel() = panel { fill() }
+
   abstract class Details(
-    @NlsContexts.ConfigurableName val displayName: String,
-    suffix: String
+    @NlsContexts.ConfigurableName val displayName: String, suffix: String
   ) {
     val id: String = "io.github.kyay10.prettifykotlin.settings$suffix"
   }
@@ -66,7 +73,7 @@ abstract class BaseSettingsConfigurable(val project: Project, details: Details) 
 class SettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
   companion object : Details("Prettify Kotlin", "")
 
-  override fun createPanel() = panel {
+  override fun Panel.fill() {
     row { checkBox("Enable prettification").bindSelected(settings::isEnabled).focused() }.bottomGap(BottomGap.SMALL)
     panel {
       indent {
@@ -88,54 +95,29 @@ class SettingsConfigurable(project: Project) : BaseSettingsConfigurable(project,
 class IdentifierSettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
   companion object : Details("Identifiers", ".identifiers")
 
-  // TODO validation
-  private val identifierEditor =
-    TableModelEditor(
-      arrayOf(columnInfo("Regex", RegexEntry::regex), columnInfo("Replacement", RegexEntry::replacement)),
-      object : ListItemEditor<RegexEntry> {
-        override fun getItemClass() = RegexEntry::class.java
-        override fun clone(item: RegexEntry, forInPlaceEditing: Boolean) = item.copy()
-      }, "No replacements yet"
-    )
-
-  override fun createPanel() = panel {
-    row {
-      cell(identifierEditor.createComponent())
-        .align(Align.FILL)
-        .focused()
-        .bind(
-          { identifierEditor.model.items },
-          { _, items -> identifierEditor.model.items = items.mapTo(ArrayList(items.size)) { it.copy() } },
-          settings::identifierToReplacement.toMutableProperty(),
-        )
-    }.resizableRow()
-  }
+  override fun Panel.fill() = row {
+    val model = listTableModel(RegexEntry.regex columnInfo "Regex", RegexEntry.replacement columnInfo "Replacement")
+    cell(
+      ToolbarDecorator.createDecorator(tableView(model, "No replacements"), object : ElementProducer<RegexEntry> {
+        override fun canCreateElement() = true
+        override fun createElement() = RegexEntry()
+      }).createPanel()
+    ).align(Align.FILL).focused().bindItems(model, settings::identifierToReplacement)
+  }.resizableRow()
 }
 
 class TokenSettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
   companion object : Details("Tokens", ".tokens")
 
-  private val tokenModel = ListTableModel<TokenEntry>(
-    columnInfo("Token", TokenEntry::token),
-    columnInfo("Replacement", TokenEntry::replacement)
-  )
-  private val tokenTable = TableView(tokenModel)
-
-  override fun createPanel() = panel {
-    row {
-      scrollCell(tokenTable)
-        .align(Align.FILL)
-        .focused()
-        .bind(
-          {
-            tokenModel.items.filter { it.replacement != "" }
-              .associate { (token, replacement) -> token.value to replacement }
-          },
-          { _, map ->
-            tokenModel.items = allKeywords.values.map { TokenEntry(it, map[it.value] ?: "") }.toMutableList()
-          },
-          settings::tokenToReplacement.toMutableProperty()
-        )
-    }.resizableRow()
-  }
+  override fun Panel.fill() = row {
+    val model = listTableModel(TokenEntry::code columnInfo "Token", TokenEntry.replacement columnInfo "Replacement")
+    scrollCell(TableView(model).also(TableSpeedSearch::installOn)).align(Align.FILL).focused().bindItems(model, {
+      val map = settings.tokenToReplacement
+      allKeywords.values.map { TokenEntry(it, map[it.code] ?: "") }
+    }, {
+      settings.tokenToReplacement = buildMap(it.size) {
+        it.forEach { (token, replacement) -> if (replacement != "") put(token.code, replacement) }
+      }
+    })
+  }.resizableRow()
 }

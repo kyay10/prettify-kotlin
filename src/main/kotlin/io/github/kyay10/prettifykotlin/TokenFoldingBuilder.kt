@@ -18,7 +18,7 @@ class TokenFoldingBuilder : FoldingBuilderEx(), DumbAware {
       val state = root.project.service<Settings>()
       if (!state.isEnabled) return@buildList
       root.childLeafs().forEach { element ->
-        state.tokenToReplacement[(element.elementType as? KtSingleValueToken)?.value]?.let { replacement ->
+        state.tokenToReplacement[(element.elementType as? KtSingleValueToken)?.code]?.let { replacement ->
           add(prettyFoldingDescriptor(element, replacement))
           return@forEach
         }
