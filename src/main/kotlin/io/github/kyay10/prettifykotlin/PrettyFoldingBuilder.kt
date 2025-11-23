@@ -93,7 +93,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
               prettyFoldingDescriptor(
                 expression.getReferencedNameElement(),
                 name,
-                dependencies = setOf(reference.psi)
+                dependencies = setOfNotNull(reference.psi)
               )
             )
           }
@@ -116,8 +116,8 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
               val (leftPar, rightPar) = expression.valueArgumentList.bind().run {
                 leftParenthesis.bind() to rightParenthesis.bind()
               }
-              add(prettyFoldingDescriptor(leftPar, prefix, dependencies = setOf(reference.psi)))
-              add(prettyFoldingDescriptor(rightPar, suffix, dependencies = setOf(reference.psi)))
+              add(prettyFoldingDescriptor(leftPar, prefix, dependencies = setOfNotNull(reference.psi)))
+              add(prettyFoldingDescriptor(rightPar, suffix, dependencies = setOfNotNull(reference.psi)))
             }
             impure {
               val call = expression.resolveToCall()?.successfulFunctionCallOrNull().bind()
@@ -130,15 +130,15 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
                 val suffix = annotation.findConstantArgument(AUTOLAMBDA_SUFFIX) { "" }
                 if (arg !is KtLambdaExpression) return@forEach
                 val lambda = arg.functionLiteral
-                add(prettyFoldingDescriptor(lambda.lBrace, prefix, dependencies = setOf(reference.psi)))
+                add(prettyFoldingDescriptor(lambda.lBrace, prefix, dependencies = setOfNotNull(reference.psi)))
                 lambda.lBrace.foldForSingleSpaceAfter?.let(::add)
                 lambda.arrow?.let {
-                  add(prettyFoldingDescriptor(it, arrow, dependencies = setOf(reference.psi)))
+                  add(prettyFoldingDescriptor(it, arrow, dependencies = setOfNotNull(reference.psi)))
                   it.foldForSingleSpaceAfter?.let(::add)
                   it.foldForSingleSpaceBefore?.let(::add)
                 }
                 lambda.rBrace?.let {
-                  add(prettyFoldingDescriptor(it, suffix, dependencies = setOf(reference.psi)))
+                  add(prettyFoldingDescriptor(it, suffix, dependencies = setOfNotNull(reference.psi)))
                   if (!lambda.isMultiline()) it.foldForSingleSpaceBefore?.let(::add)
                 }
               }
@@ -157,7 +157,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
               val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
               PostfixData(annotation.findConstantArgument(POSTFIX_SUFFIX) { "" })
             }
-            add(prettyFoldingDescriptor(expression.operationTokenNode.psi, suffix, dependencies = setOf(reference.psi)))
+            add(prettyFoldingDescriptor(expression.operationTokenNode.psi, suffix, dependencies = setOfNotNull(reference.psi)))
           }
         }
       })

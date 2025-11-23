@@ -46,7 +46,7 @@ fun Document?.prettyFoldingDescriptor(
   node: PsiElement,
   placeholder: String,
   range: TextRange = node.textRange,
-  dependencies: Set<Any?> = setOf(),
+  dependencies: Set<Any> = setOf(),
 ) = FoldingDescriptor(node.node, range, null, dependencies, true, placeholder, true).apply {
   setCanBeRemovedWhenCollapsed(true)
 }.takeIf { (range shl node.textRange.startOffset).substring(node.text) != placeholder }?.also {
