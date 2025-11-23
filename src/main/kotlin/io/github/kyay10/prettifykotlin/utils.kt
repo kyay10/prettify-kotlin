@@ -1,6 +1,8 @@
 package io.github.kyay10.prettifykotlin
 
+import arrow.core.getOrElse
 import arrow.optics.Lens
+import arrow.optics.Optional
 import com.intellij.codeInsight.folding.CodeFoldingManager
 import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.components.SerializablePersistentStateComponent
@@ -10,6 +12,7 @@ import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.openapi.editor.impl.DocumentMarkupModel
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.NlsContexts
 import com.intellij.openapi.util.NlsContexts.ColumnName
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
@@ -17,16 +20,25 @@ import com.intellij.psi.tree.IElementType
 import com.intellij.ui.TableSpeedSearch
 import com.intellij.ui.dsl.builder.Cell
 import com.intellij.ui.dsl.builder.MutableProperty
+import com.intellij.ui.dsl.builder.Panel
+import com.intellij.ui.dsl.builder.Row
+import com.intellij.ui.dsl.builder.bindSelected
+import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.builder.selected
 import com.intellij.ui.dsl.builder.toMutableProperty
 import com.intellij.ui.table.TableView
 import com.intellij.util.ui.ColumnInfo
 import com.intellij.util.ui.ImmutableColumnInfo
 import com.intellij.util.ui.ListTableModel
+import org.jetbrains.annotations.Nls
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotation
 import org.jetbrains.kotlin.analysis.api.annotations.KaAnnotationValue
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.lexer.KtSingleValueToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
+import javax.swing.JCheckBox
+import javax.swing.JLabel
 import kotlin.reflect.KMutableProperty0
 import kotlin.reflect.KProperty
 
@@ -47,6 +59,8 @@ fun Document?.prettyFoldingDescriptor(
     }
   }
 }
+
+val KaCallableSymbol.fqName get() = callableId?.asSingleFqName()?.asString()
 
 fun KaAnnotation.findConstantArgument(name: Name): Any? = findConstantArgument(name) { null }
 
@@ -116,16 +130,13 @@ fun <Item> Cell<*>.bindItems(model: ListTableModel<Item>, property: MutablePrope
 fun <Item> Cell<*>.bindItems(model: ListTableModel<Item>, property: KMutableProperty0<List<Item>>) =
   bindItems(model, property.toMutableProperty())
 
-fun <Item> Cell<*>.bindItems(model: ListTableModel<Item>, get: () -> List<Item>, set: (List<Item>) -> Unit) =
-  bindItems(model, MutableProperty(get, set))
-
-inline infix fun <T : Any, reified A> (T.() -> A).columnInfo(@ColumnName name: String) =
+inline infix fun <T, reified A> (T.() -> A).columnInfo(@ColumnName name: String) =
   object : ColumnInfo<T, A>(name) {
     override fun getColumnClass() = A::class.java
     override fun valueOf(item: T) = this@columnInfo(item)
   }
 
-inline infix fun <T : Any, reified A> Lens<T, A>.columnInfo(@ColumnName name: String) =
+inline infix fun <T, reified A> Lens<T, A>.columnInfo(@ColumnName name: String) =
   object : ImmutableColumnInfo<T, A>(name) {
     override fun getColumnClass() = A::class.java
     override fun isCellEditable(item: T) = true
@@ -135,3 +146,67 @@ inline infix fun <T : Any, reified A> Lens<T, A>.columnInfo(@ColumnName name: St
       throw UnsupportedOperationException()
     }
   }
+
+inline fun <T> MutableProperty<T>.modify(operation: (T) -> T) = set(operation(get()))
+
+context(p: MutableProperty<T>)
+val <T, A> Lens<T, A>.property
+  get() = MutableProperty(
+    { get(p.get()) },
+    { value -> p.modify { set(it, value) } }
+  )
+
+context(p: MutableProperty<T?>)
+fun <T, A> Lens<T, A>.property(default: A) = Optional.notNull<T>().compose(this).default(default).property
+
+context(p: MutableProperty<T>)
+fun <T, A, R> Lens<T, A>.focus(block: context(MutableProperty<A>) () -> R): R = block(property)
+
+infix fun <T, A> MutableProperty<T>.compose(lens: Lens<T, A>) = with(this) { lens.property }
+
+infix fun <T, A> KMutableProperty0<T>.compose(lens: Lens<T, A>) = toMutableProperty() compose lens
+
+infix fun <T, A> Optional<T, A>.default(value: A): Lens<T, A> = Lens(
+  get = { opt -> getOrModify(opt).getOrElse { value } },
+  set = { opt, v -> set(opt, v) }
+)
+
+val <T> T.defaultLens: Lens<T?, Boolean>
+  get() = Lens(
+    get = { it != null },
+    set = { a, value -> (a ?: this).takeIf { value } }
+  )
+
+fun <T> panel(property: MutableProperty<T>, init: context(MutableProperty<T>) Panel.() -> Unit) = panel {
+  with(property) { init() }
+}
+
+fun <T> panel(property: KMutableProperty0<T>, init: context(MutableProperty<T>) Panel.() -> Unit) =
+  panel(property.toMutableProperty(), init)
+
+
+context(_: MutableProperty<T>)
+fun <T, A> Panel.row(lens: Lens<T, A>, label: JLabel? = null, init: context(MutableProperty<A>) Row.() -> Unit) =
+  row(label) {
+    lens.focus { init() }
+  }
+
+context(_: MutableProperty<T>)
+fun <T, A> Panel.row(lens: Lens<T, A>, @Nls label: String, init: context(MutableProperty<A>) Row.() -> Unit) =
+  row(label) {
+    lens.focus { init() }
+  }
+
+context(p: Panel, _: MutableProperty<T?>)
+fun <T> optionsRows(@NlsContexts.Checkbox checkBoxText: String, default: T, init: Panel.() -> Unit) = p.rowsRange {
+  lateinit var checkBox: Cell<JCheckBox>
+  row { checkBox = checkBox(checkBoxText).bindSelected(default.defaultLens.property) }
+  indent(init).enabledIf(checkBox.selected)
+}
+
+context(p: Panel, _: MutableProperty<T>)
+fun <T, A> Lens<T, A?>.optionsRows(
+  @NlsContexts.Checkbox checkBoxText: String,
+  default: A,
+  init: context(MutableProperty<A?>) Panel.() -> Unit
+) = focus { optionsRows<A>(checkBoxText, default) { init(p) } }

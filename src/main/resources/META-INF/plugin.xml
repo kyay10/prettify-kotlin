@@ -26,6 +26,10 @@
                     id="io.github.kyay10.prettifykotlin.settings.tokens"
                     displayName="Tokens"
                     instance="io.github.kyay10.prettifykotlin.TokenSettingsConfigurable"/>
+            <configurable
+                    id="io.github.kyay10.prettifykotlin.settings.fqn"
+                    displayName="Fully Qualified Names"
+                    instance="io.github.kyay10.prettifykotlin.FqNameSettingsConfigurable"/>
         </projectConfigurable>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
