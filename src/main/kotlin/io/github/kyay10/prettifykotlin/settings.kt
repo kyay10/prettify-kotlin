@@ -26,7 +26,6 @@ import com.intellij.openapi.util.NlsContexts
 import com.intellij.ui.TableSpeedSearch
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.dsl.builder.Align
-import com.intellij.ui.dsl.builder.BottomGap
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.RowLayout
 import com.intellij.ui.dsl.builder.bindSelected
@@ -35,6 +34,7 @@ import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import com.intellij.ui.table.TableView
 import com.intellij.util.PlatformIcons
+import com.intellij.util.application
 import com.intellij.util.ui.ElementProducer
 import com.intellij.util.xmlb.annotations.Attribute
 import com.intellij.util.xmlb.annotations.Property
@@ -77,26 +77,38 @@ data class PrettyAttributes(
   @XMap val autoLambda: Map<String, AutoLambdaData> = emptyMap()
 )
 
-@Service(Service.Level.PROJECT)
+@Service(Service.Level.PROJECT, Service.Level.APP)
 @State(name = "io.github.kyay10.prettifykotlin.Settings", storages = [Storage("prettify_kotlin.xml")])
 class Settings : OpticsStateComponent<Settings.State>(State()) {
   @optics
   data class State(
-    @Attribute("enabled") val isEnabled: Boolean = true,
     @XMap val tokenToReplacement: Map<String, String> = emptyMap(),
     @XCollection(style = XCollection.Style.v2) val identifierToReplacement: List<RegexEntry> = emptyList(),
     @XMap val fqNameToPrettyData: Map<String, PrettyAttributes> = emptyMap(),
   ) : Serializable
 
-  var isEnabled by State.isEnabled
   var tokenToReplacement by State.tokenToReplacement
   var identifierToReplacement by State.identifierToReplacement
   var fqNameToPrettyData by State.fqNameToPrettyData
+
+  companion object {
+    val Project.settings: Settings.State
+      get() {
+        val projectSettings = service<Settings>().state
+        val appSettings = application.service<Settings>().state
+        // Application settings take priority
+        return State(
+          tokenToReplacement = projectSettings.tokenToReplacement + appSettings.tokenToReplacement,
+          identifierToReplacement = projectSettings.identifierToReplacement + appSettings.identifierToReplacement,
+          fqNameToPrettyData = projectSettings.fqNameToPrettyData + appSettings.fqNameToPrettyData,
+        )
+      }
+  }
 }
 
-abstract class BaseSettingsConfigurable(val project: Project, details: Details) :
-  BoundSearchableConfigurable(details.displayName, details.id) {
-  val settings = project.service<Settings>()
+abstract class BaseSettingsConfigurable(val project: Project?, details: Details) :
+  BoundSearchableConfigurable(details.displayName, details.getId(project != null)) {
+  val settings = project?.service<Settings>() ?: application.service<Settings>()
   override fun apply() {
     super.apply()
     project.updateFoldings()
@@ -106,35 +118,32 @@ abstract class BaseSettingsConfigurable(val project: Project, details: Details) 
   final override fun createPanel() = panel { fill() }
 
   abstract class Details(
-    @NlsContexts.ConfigurableName val displayName: String, suffix: String
+    @NlsContexts.ConfigurableName val displayName: String, val suffix: String
   ) {
-    val id: String = "io.github.kyay10.prettifykotlin.settings$suffix"
+    fun getId(isProject: Boolean): String =
+      if (isProject) "io.github.kyay10.prettifykotlin.settings$suffix"
+      else "io.github.kyay10.prettifykotlin.appsettings$suffix"
   }
 }
 
-class SettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
+class SettingsConfigurable(project: Project? = null) : BaseSettingsConfigurable(project, Companion) {
   companion object : Details("Prettify Kotlin", "")
 
-  override fun Panel.fill() {
-    row { checkBox("Enable prettification").bindSelected(settings::isEnabled).focused() }.bottomGap(BottomGap.SMALL)
-    panel {
-      indent {
-        for (page in listOf(IdentifierSettingsConfigurable, TokenSettingsConfigurable, FqNameSettingsConfigurable)) {
-          row {
-            @Suppress("DialogTitleCapitalization")
-            link(page.displayName) { event ->
-              val component = event.source as? Component
-              val settings = SettingsKey.getData(getInstance().getDataContext(component)) ?: return@link
-              settings.find(page.id)?.let(settings::select)
-            }.customize(UnscaledGaps(bottom = 4))
-          }
-        }
+  override fun Panel.fill() = indent {
+    for (page in listOf(IdentifierSettingsConfigurable, TokenSettingsConfigurable, FqNameSettingsConfigurable)) {
+      row {
+        @Suppress("DialogTitleCapitalization")
+        link(page.displayName) { event ->
+          val component = event.source as? Component
+          val settings = SettingsKey.getData(getInstance().getDataContext(component)) ?: return@link
+          settings.find(page.getId(project != null))?.let(settings::select)
+        }.customize(UnscaledGaps(bottom = 4))
       }
     }
   }
 }
 
-class IdentifierSettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
+class IdentifierSettingsConfigurable(project: Project? = null) : BaseSettingsConfigurable(project, Companion) {
   companion object : Details("Identifiers", ".identifiers")
 
   override fun Panel.fill() = row {
@@ -148,7 +157,7 @@ class IdentifierSettingsConfigurable(project: Project) : BaseSettingsConfigurabl
   }.resizableRow()
 }
 
-class TokenSettingsConfigurable(project: Project) : BaseSettingsConfigurable(project, Companion) {
+class TokenSettingsConfigurable(project: Project? = null) : BaseSettingsConfigurable(project, Companion) {
   companion object : Details("Tokens", ".tokens")
 
   override fun Panel.fill() = row {
@@ -170,8 +179,7 @@ internal class PrettyDetailsConfigurable(
   val originalName: String?,
   var prettyAttributes: PrettyAttributes,
   treeUpdate: Runnable
-) :
-  NamedConfigurable<PrettyAttributes>(true, treeUpdate) {
+) : NamedConfigurable<PrettyAttributes>(true, treeUpdate) {
   var name: String = originalName ?: "path.to.some.function"
     private set
   val options: UnnamedConfigurable = object : DslConfigurableBase() {
@@ -216,10 +224,11 @@ internal class PrettyDetailsConfigurable(
   }
 }
 
-class FqNameSettingsConfigurable(private val project: Project) : MasterDetailsComponent(), SearchableConfigurable {
+class FqNameSettingsConfigurable(private val project: Project? = null) : MasterDetailsComponent(),
+  SearchableConfigurable {
   companion object : BaseSettingsConfigurable.Details("Fully Qualified Names", ".fqn")
 
-  val settings = project.service<Settings>()
+  val settings = project?.service<Settings>() ?: application.service<Settings>()
 
   init {
     initTree()
@@ -227,8 +236,8 @@ class FqNameSettingsConfigurable(private val project: Project) : MasterDetailsCo
   }
 
   override fun getDisplayName() = Companion.displayName
-  override fun getId() = Companion.id
-  override fun getHelpTopic() = Companion.id
+  override fun getId() = getId(project != null)
+  override fun getHelpTopic() = getId(project != null)
 
   override fun getEmptySelectionString() = "Select an FQN replacement to view or edit its details"
 

@@ -31,6 +31,24 @@
                     displayName="Fully Qualified Names"
                     instance="io.github.kyay10.prettifykotlin.FqNameSettingsConfigurable"/>
         </projectConfigurable>
+        <applicationConfigurable
+                parentId="tools"
+                id="io.github.kyay10.prettifykotlin.appsettings"
+                instance="io.github.kyay10.prettifykotlin.SettingsConfigurable"
+                displayName="Prettify Kotlin">
+            <configurable
+                    id="io.github.kyay10.prettifykotlin.appsettings.identifiers"
+                    displayName="Identifiers"
+                    instance="io.github.kyay10.prettifykotlin.IdentifierSettingsConfigurable"/>
+            <configurable
+                    id="io.github.kyay10.prettifykotlin.appsettings.tokens"
+                    displayName="Tokens"
+                    instance="io.github.kyay10.prettifykotlin.TokenSettingsConfigurable"/>
+            <configurable
+                    id="io.github.kyay10.prettifykotlin.appsettings.fqn"
+                    displayName="Fully Qualified Names"
+                    instance="io.github.kyay10.prettifykotlin.FqNameSettingsConfigurable"/>
+        </applicationConfigurable>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
         <supportsKotlinPluginMode supportsK2="true"/>

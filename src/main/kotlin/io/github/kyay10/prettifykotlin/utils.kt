@@ -3,6 +3,8 @@ package io.github.kyay10.prettifykotlin
 import arrow.core.getOrElse
 import arrow.optics.Lens
 import arrow.optics.Optional
+import arrow.core.raise.Raise
+import arrow.core.raise.context.raise
 import com.intellij.codeInsight.folding.CodeFoldingManager
 import com.intellij.lang.folding.FoldingDescriptor
 import com.intellij.openapi.components.SerializablePersistentStateComponent
@@ -62,7 +64,8 @@ fun Document?.prettyFoldingDescriptor(
 
 val KaCallableSymbol.fqName get() = callableId?.asSingleFqName()?.asString()
 
-fun KaAnnotation.findConstantArgument(name: Name): Any? = findConstantArgument(name) { null }
+context(_: Raise<Unit>)
+inline fun <reified T> KaAnnotation.findConstantArgument(name: Name): T = findConstantArgument(name) { raise(Unit) }
 
 inline fun <reified T> KaAnnotation.findConstantArgument(name: Name, default: () -> T): T {
   val constValue = (arguments.find { it.name == name }?.expression as? KaAnnotationValue.ConstantValue)?.value
@@ -93,10 +96,10 @@ val KtSingleValueToken.code get() = if (this == KtTokens.AS_SAFE) "as?" else val
 val allKeywords = (IElementType.enumerate { it is KtSingleValueToken }.toList() as List<KtSingleValueToken>)
   .associateBy { it.code }.toSortedMap()
 
-fun Project.updateFoldings() {
-  EditorFactory.getInstance().allEditors.forEach {
-    if (it.project == this) it.updateFoldings()
-  }
+fun Project?.updateFoldings() {
+  val editors = EditorFactory.getInstance().allEditors
+  if (this != null) editors.forEach { if (it.project == this) it.updateFoldings() }
+  else editors.forEach(Editor::updateFoldings)
 }
 
 fun Editor.updateFoldings() {

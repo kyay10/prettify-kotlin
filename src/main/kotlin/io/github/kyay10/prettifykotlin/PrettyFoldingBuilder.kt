@@ -3,7 +3,7 @@ package io.github.kyay10.prettifykotlin
 import arrow.core.raise.impure
 import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
-import com.intellij.openapi.components.service
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
@@ -11,6 +11,7 @@ import com.intellij.openapi.editor.event.BulkAwareDocumentListener
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
+import io.github.kyay10.prettifykotlin.Settings.Companion.settings
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
@@ -54,20 +55,21 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
     }
   }
 
+  @Suppress("SimpleRedundantLet") //KTIJ-36603
   override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean) = with(document) {
     val project = root.project
-    val settings = project.service<Settings>()
+    val settings = project.settings
     val psiDocumentManager = PsiDocumentManager.getInstance(project)
     fun PsiElement.addListenerIfNecessary() {
       val file = this.containingFile ?: return
       psiDocumentManager.getCachedDocument(file)?.let {
         listener.effectMap.getOrPut(it) {
-          it.addDocumentListener(listener)
+          it.addDocumentListener(listener, object: Disposable.Default {})
           mutableSetOf()
         }.add(document)
       }
     }
-    if (quick || !settings.isEnabled) emptyArray()
+    if (quick) emptyArray()
     else buildList {
       root.accept(object : KtTreeVisitorVoid() {
         override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) = impure {
@@ -77,11 +79,10 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             val reference = expression.mainReference.resolveToSymbol()
             ensure(reference is KaCallableSymbol)
             reference.psi?.addListenerIfNecessary()
-            val (name, infixOnly) = settings.fqNameToPrettyData[reference.fqName]?.pretty ?: run {
+            val (name, infixOnly) = settings.fqNameToPrettyData[reference.fqName]?.let { it.pretty.bind() } ?: run {
               val annotation = reference.annotations[PRETTY].singleOrNull().bind()
-              val name = annotation.findConstantArgument(PRETTY_NAME)
+              val name: String = annotation.findConstantArgument(PRETTY_NAME)
               val infixOnly = annotation.findConstantArgument(PRETTY_INFIX_ONLY) { false }
-              ensure(name is String)
               PrettyData(name, infixOnly)
             }
             if (infixOnly) {
@@ -106,7 +107,7 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             ensure(reference is KaCallableSymbol)
             reference.psi?.addListenerIfNecessary()
             impure {
-              val (prefix, suffix) = settings.fqNameToPrettyData[reference.fqName]?.prefix ?: run {
+              val (prefix, suffix) = settings.fqNameToPrettyData[reference.fqName]?.let { it.prefix.bind() } ?: run {
                 val annotation = reference.annotations[PREFIX].singleOrNull().bind()
                 val prefix = annotation.findConstantArgument(PREFIX_PREFIX) { "" }
                 val suffix = annotation.findConstantArgument(PREFIX_SUFFIX) { "" }
@@ -153,11 +154,17 @@ class PrettyFoldingBuilder : FoldingBuilderEx() {
             val reference = selector.reference().bind().resolveToSymbol()
             ensure(reference is KaCallableSymbol)
             reference.psi?.addListenerIfNecessary()
-            val (suffix) = settings.fqNameToPrettyData[reference.fqName]?.postfix ?: run {
+            val (suffix) = settings.fqNameToPrettyData[reference.fqName]?.let { it.postfix.bind() } ?: run {
               val annotation = reference.annotations[POSTFIX].singleOrNull().bind()
               PostfixData(annotation.findConstantArgument(POSTFIX_SUFFIX) { "" })
             }
-            add(prettyFoldingDescriptor(expression.operationTokenNode.psi, suffix, dependencies = setOfNotNull(reference.psi)))
+            add(
+              prettyFoldingDescriptor(
+                expression.operationTokenNode.psi,
+                suffix,
+                dependencies = setOfNotNull(reference.psi)
+              )
+            )
           }
         }
       })
