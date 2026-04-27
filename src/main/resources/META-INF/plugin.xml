@@ -35,7 +35,7 @@
                 parentId="tools"
                 id="io.github.kyay10.prettifykotlin.appsettings"
                 instance="io.github.kyay10.prettifykotlin.SettingsConfigurable"
-                displayName="Prettify Kotlin">
+                displayName="Prettify Kotlin Global">
             <configurable
                     id="io.github.kyay10.prettifykotlin.appsettings.identifiers"
                     displayName="Identifiers"

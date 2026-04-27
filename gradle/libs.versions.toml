@@ -1,25 +1,17 @@
 [versions]
 # libraries
 junit = "4.13.2"
-opentest4j = "1.3.0"
 
 # plugins
-arrow = "2.2.0"
-kotlin = "2.1.20"
-changelog = "2.4.0"
-intellij-platform = "2.9.0"
-qodana = "2025.1.1"
-kover = "0.9.1"
+arrow = "2.2.2.1"
+kotlin = "2.3.21"
+changelog = "2.5.0"
 
 [libraries]
 arrow-core = { group = "io.arrow-kt", name = "arrow-core", version.ref = "arrow" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-opentest4j = { group = "org.opentest4j", name = "opentest4j", version.ref = "opentest4j" }
 
 [plugins]
 changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
-intellij-platform = { id = "org.jetbrains.intellij.platform", version.ref = "intellij-platform" }
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
-qodana = { id = "org.jetbrains.qodana", version.ref = "qodana" }
 arrow-optics = { id = "io.arrow-kt.optics", version.ref = "arrow" }

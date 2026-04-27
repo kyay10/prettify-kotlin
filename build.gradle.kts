@@ -3,58 +3,34 @@ import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
-fun properties(key: String) = providers.gradleProperty(key)
-fun environment(key: String) = providers.environmentVariable(key)
-
 plugins {
-  id("java")
   alias(libs.plugins.kotlin)
-  alias(libs.plugins.intellij.platform)
+  id("org.jetbrains.intellij.platform")
   alias(libs.plugins.changelog)
-  alias(libs.plugins.qodana)
-  alias(libs.plugins.kover)
   alias(libs.plugins.arrow.optics)
-}
-
-group = properties("pluginGroup").get()
-version = properties("pluginVersion").get()
-
-repositories {
-  mavenCentral()
-
-  intellijPlatform {
-    defaultRepositories()
-  }
 }
 
 dependencies {
   testImplementation(libs.junit)
-  testImplementation(libs.opentest4j)
+
+  // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
   intellijPlatform {
-    create(properties("platformType"), properties("platformVersion"))
-    properties("platformBundledPlugins").map { it.split(',') }.let(::bundledPlugins)
-    properties("platformPlugins").map { it.split(',') }.let(::plugins)
+    intellijIdea("2025.1")
+    bundledPlugins(listOf("org.jetbrains.kotlin"))
     testFramework(TestFrameworkType.Platform)
   }
 }
 
-// Set the JVM language level used to build the project. Use Java 11 for 2020.3+, and Java 17 for 2022.2+.
 kotlin {
-  compilerOptions {
-    freeCompilerArgs.add("-Xcontext-parameters")
-  }
-  dependencies {
-    implementation(libs.arrow.core)
-  }
-  jvmToolchain(17)
+  compilerOptions { freeCompilerArgs.add("-Xcontext-parameters") }
+  dependencies { implementation(libs.arrow.core) }
   arrowOptics()
 }
 
+// Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
   pluginConfiguration {
-    name = properties("pluginName")
-    version = properties("pluginVersion")
-
+    // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
     description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
       val start = "<!-- Plugin description -->"
       val end = "<!-- Plugin description end -->"
@@ -69,7 +45,7 @@ intellijPlatform {
 
     val changelog = project.changelog // local variable for configuration cache compatibility
     // Get the latest available change notes from the changelog file
-    changeNotes = properties("pluginVersion").map { pluginVersion ->
+    changeNotes = version.map { pluginVersion ->
       with(changelog) {
         renderItem(
           (getOrNull(pluginVersion) ?: getUnreleased())
@@ -79,68 +55,18 @@ intellijPlatform {
         )
       }
     }
-    ideaVersion {
-      sinceBuild = providers.gradleProperty("pluginSinceBuild")
-    }
-  }
-  signing {
-    certificateChain = environment("CERTIFICATE_CHAIN")
-    privateKey = environment("PRIVATE_KEY")
-    password = environment("PRIVATE_KEY_PASSWORD")
-  }
-  publishing {
-    token = properties("intellijPublishToken")
-    channels = properties("pluginVersion").map { listOf(it.split('-').getOrElse(1) { "default" }.split('.').first()) }
-  }
-  pluginVerification {
-    ides {
-      recommended()
-    }
   }
 }
 
+// Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
 changelog {
   groups.empty()
-  repositoryUrl = properties("pluginRepositoryUrl")
-}
-
-kover {
-  reports {
-    total {
-      xml {
-        onCheck = true
-      }
-    }
-  }
+  repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
+  versionPrefix = ""
 }
 
 tasks {
-  wrapper {
-    gradleVersion = providers.gradleProperty("gradleVersion").get()
-  }
-
   publishPlugin {
     dependsOn(patchChangelog)
-  }
-}
-
-intellijPlatformTesting {
-  runIde {
-    register("runIdeForUiTests") {
-      task {
-        jvmArgumentProviders += CommandLineArgumentProvider {
-          listOf(
-            "-Drobot-server.port=8082",
-            "-Dide.mac.message.dialogs.as.sheets=false",
-            "-Djb.privacy.policy.text=<!--999.999-->",
-            "-Djb.consents.confirmation.enabled=false",
-          )
-        }
-      }
-
-      plugins {
-        robotServerPlugin()
-      }
-    }
   }
 }

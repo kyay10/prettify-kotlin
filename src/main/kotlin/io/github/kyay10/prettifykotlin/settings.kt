@@ -111,13 +111,13 @@ abstract class BaseSettingsConfigurable(val project: Project?, details: Details)
   val settings = project?.service<Settings>() ?: application.service<Settings>()
   override fun apply() {
     super.apply()
-    project.updateFoldings()
+    updateFoldings()
   }
 
   abstract fun Panel.fill(): Any?
   final override fun createPanel() = panel { fill() }
 
-  abstract class Details(
+  open class Details(
     @NlsContexts.ConfigurableName val displayName: String, val suffix: String
   ) {
     fun getId(isProject: Boolean): String =
@@ -126,9 +126,8 @@ abstract class BaseSettingsConfigurable(val project: Project?, details: Details)
   }
 }
 
-class SettingsConfigurable(project: Project? = null) : BaseSettingsConfigurable(project, Companion) {
-  companion object : Details("Prettify Kotlin", "")
-
+class SettingsConfigurable(project: Project? = null) :
+  BaseSettingsConfigurable(project, Details(if (project != null) "Prettify Kotlin" else "Prettify Kotlin Global", "")) {
   override fun Panel.fill() = indent {
     for (page in listOf(IdentifierSettingsConfigurable, TokenSettingsConfigurable, FqNameSettingsConfigurable)) {
       row {
@@ -253,7 +252,7 @@ class FqNameSettingsConfigurable(private val project: Project? = null) : MasterD
         put(configurable.name, configurable.prettyAttributes)
       }
     }
-    project.updateFoldings()
+    updateFoldings()
   }
 
   override fun reset() {

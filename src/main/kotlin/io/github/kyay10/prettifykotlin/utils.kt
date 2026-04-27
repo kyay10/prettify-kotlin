@@ -1,19 +1,21 @@
 package io.github.kyay10.prettifykotlin
 
 import arrow.core.getOrElse
-import arrow.optics.Lens
-import arrow.optics.Optional
 import arrow.core.raise.Raise
 import arrow.core.raise.context.raise
+import arrow.optics.Lens
+import arrow.optics.Optional
+import com.intellij.application.options.editor.EditorOptionsListener
 import com.intellij.codeInsight.folding.CodeFoldingManager
 import com.intellij.lang.folding.FoldingDescriptor
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.SerializablePersistentStateComponent
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.openapi.editor.impl.DocumentMarkupModel
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.NlsContexts
 import com.intellij.openapi.util.NlsContexts.ColumnName
 import com.intellij.openapi.util.TextRange
@@ -96,15 +98,16 @@ val KtSingleValueToken.code get() = if (this == KtTokens.AS_SAFE) "as?" else val
 val allKeywords = (IElementType.enumerate { it is KtSingleValueToken }.toList() as List<KtSingleValueToken>)
   .associateBy { it.code }.toSortedMap()
 
-fun Project?.updateFoldings() {
-  val editors = EditorFactory.getInstance().allEditors
-  if (this != null) editors.forEach { if (it.project == this) it.updateFoldings() }
-  else editors.forEach(Editor::updateFoldings)
-}
+fun updateFoldings() = ApplicationManager.getApplication().invokeLater({
+  EditorFactory.getInstance().refreshAllEditors()
+  EditorFactory.getInstance().allEditors.forEach(Editor::updateFoldings)
+  ApplicationManager.getApplication().messageBus.syncPublisher(EditorOptionsListener.FOLDING_CONFIGURABLE_TOPIC)
+    .changesApplied()
+}, ModalityState.nonModal())
 
 fun Editor.updateFoldings() {
-  val project = this.project ?: return
-  if (this.virtualFile?.extension == "kt")
+  val project = project
+  if (project != null && !project.isDefault)
     CodeFoldingManager.getInstance(project).scheduleAsyncFoldingUpdate(this)
 }
 
